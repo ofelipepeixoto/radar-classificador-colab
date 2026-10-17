@@ -135,9 +135,15 @@ def validate_environment(environment, repo=ROOT, *, check_cuda=True):
                 't=torch.ones((16,16),device=r["device"],dtype=r["dtype"]); '
                 '(t@t).sum().item(); torch.cuda.synchronize(); r.pop("dtype"); '
                 'print(json.dumps(r))')
-        result = subprocess.run([str(executable), '-I', '-B', '-c', code,
-                                 str(Path(repo) / 'ft05')], check=True,
-                                capture_output=True, text=True, timeout=120)
+        try:
+            result = subprocess.run([str(executable), '-I', '-B', '-c', code,
+                                     str(Path(repo) / 'ft05')], check=True,
+                                    capture_output=True, text=True, timeout=120)
+        except subprocess.CalledProcessError as exc:
+            # This fixed probe loads no model, input text, Drive file or token.
+            diagnostic = (exc.stderr or '').strip()[-2000:]
+            raise ValueError('Não foi possível verificar a GPU. Nenhum treino foi iniciado.\n'
+                             + diagnostic) from None
         summary['gpu'] = json.loads(result.stdout)
     return summary
 

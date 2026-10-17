@@ -73,6 +73,9 @@ class HfCpuIntegrationTests(unittest.TestCase):
             self.assertFalse(args.fp16)
             self.assertFalse(args.bf16)
             self.assertTrue(args.gradient_checkpointing)
+            self.assertEqual(args.logging_strategy.value, 'steps')
+            self.assertEqual(args.logging_steps, 1)
+            self.assertFalse(args.logging_nan_inf_filter)
             trainer = SFTTrainer(model=model, args=args, processing_class=tokenizer,
                 train_dataset=Dataset.from_dict({'text': [
                     'user pedido entrega [EOS] assistant entrega media [EOS]']}))

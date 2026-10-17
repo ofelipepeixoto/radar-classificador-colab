@@ -333,9 +333,8 @@ class ColabEnvironmentTests(unittest.TestCase):
                     SimpleNamespace(returncode=0, stdout='', stderr=''),
                     failure,
                 ]) as run:
-            with self.assertRaises(subprocess.CalledProcessError) as raised:
+            with self.assertRaisesRegex(ValueError, 'CUDA kernel is not supported'):
                 environment.validate_environment(path, self.repo)
-        self.assertIs(raised.exception, failure)
         probe = run.call_args.args[0][-2]
         self.assertIn('torch.ones', probe)
         self.assertIn('torch.cuda.synchronize()', probe)

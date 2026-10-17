@@ -19,7 +19,7 @@ REVISION = '5fee7c4ed634dc66c6e318c8ac2897b8b9154536'
 PACKAGES = tuple(VERSIONS)
 MAX_CONTEXT = 2048
 MAX_NEW_TOKENS = 96
-MIN_GPU_BYTES = 16_000_000_000  # 16 GB decimal; includes class 16 GB GPUs reporting ~15 GiB.
+MIN_GPU_BYTES = 14 * 1024**3  # Class 16 GB GPUs reserve memory: measured T4 exposes ~14.56 GiB.
 SEED = 3407
 LORA_TARGETS = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']
 
@@ -46,7 +46,8 @@ def cuda_runtime():
         raise ValueError('cuda_required: selecione uma GPU no Colab')
     properties = torch.cuda.get_device_properties(0)
     if properties.total_memory < MIN_GPU_BYTES:
-        raise ValueError('gpu_memory_too_small: esta receita requer uma GPU de classe 16 GB ou maior')
+        raise ValueError('gpu_memory_too_small: requer GPU de classe 16 GB ou maior; '
+                         f'detectados {properties.total_memory} bytes, mínimo {MIN_GPU_BYTES}')
     # Allocation/emulation alone is insufficient for the fused training kernels.
     bf16 = torch.cuda.is_bf16_supported(including_emulation=False)
     return {'device': 'cuda:0', 'name': properties.name,
@@ -144,6 +145,7 @@ def build_sft_config(output, runtime):
         use_cpu=runtime['device'] == 'cpu',
         gradient_checkpointing=True, gradient_checkpointing_kwargs={'use_reentrant': False},
         report_to='none', seed=SEED, data_seed=SEED, packing=False,
+        logging_strategy='steps', logging_steps=1, logging_nan_inf_filter=False,
         save_strategy='epoch', save_total_limit=2)
 
 
@@ -170,9 +172,12 @@ def checked_training_metrics(train_output, trainer):
                 values[key] = value
         if values:
             observed.append(values)
+    gradient_count = sum('grad_norm' in row for row in observed)
+    if gradient_count < 1:
+        raise ValueError('training_gradient_evidence_missing')
     return {'global_step': step, 'training_loss': loss, 'metrics': metrics,
             'observed_loss_and_gradient_logs': observed,
-            'gradient_logs_checked': sum('grad_norm' in row for row in observed)}
+            'gradient_logs_checked': gradient_count}
 
 
 def run(dataset, config_path, output, execute=False, frozen_dir=None):

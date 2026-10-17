@@ -19,6 +19,13 @@ class HfBackendTests(unittest.TestCase):
                 get_device_capability=lambda device: (8, 0)))
             with self.subTest(bf16=bf16), patch.dict('sys.modules', {'torch': fake}):
                 self.assertEqual(cuda_runtime()['precision'], 'bf16' if bf16 else 'fp16')
+        fake.cuda.get_device_properties = lambda device: SimpleNamespace(
+            name='Tesla T4', total_memory=15637086208)
+        fake.cuda.get_device_capability = lambda device: (7, 5)
+        with patch.dict('sys.modules', {'torch': fake}):
+            observed = cuda_runtime()
+            self.assertEqual(observed['precision'], 'fp16')
+            self.assertEqual(observed['total_memory_bytes'], 15637086208)
         fake.cuda.is_available = lambda: False
         with patch.dict('sys.modules', {'torch': fake}):
             with self.assertRaisesRegex(ValueError, 'cuda_required'):
@@ -39,6 +46,9 @@ class HfBackendTests(unittest.TestCase):
                 checked_training_metrics(SimpleNamespace(global_step=step, training_loss=loss, metrics={}), trainer)
         trainer.state.log_history = [{'grad_norm': float('inf')}]
         with self.assertRaisesRegex(ValueError, 'nonfinite_training_metric_grad_norm'):
+            checked_training_metrics(output, trainer)
+        trainer.state.log_history = [{'loss': 1.3}]
+        with self.assertRaisesRegex(ValueError, 'training_gradient_evidence_missing'):
             checked_training_metrics(output, trainer)
 
     def test_export_and_unsafe_dependency_pins_are_refused(self):

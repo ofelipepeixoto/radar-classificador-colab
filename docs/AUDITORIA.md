@@ -27,11 +27,12 @@ são resultados do novo backend; seu desempenho ainda precisa ser medido.
   conferência das versões e verificação CUDA precedem `AMBIENTE_OK`.
 - Treino e inferência são executados pelo Python do ambiente separado. A
   interface de widgets permanece no notebook, sem servidor ou túnel público.
-- Uma GPU de classe 16 GB ou maior é exigida pelo limite de
-  16.000.000.000 bytes. Uma T4 pode aparecer com aproximadamente 15 GiB e
-  passar nesse limite; isso não homologa memória de pico, driver ou treino.
-  A distribuição Torch usa CUDA 12.9; compatibilidade real ainda precisa ser
-  verificada no Colab.
+- Receita para GPU de classe 16 GB ou maior; a verificação usa piso de 14 GiB
+  utilizáveis (15.032.385.536 bytes), permitindo a reserva de memória do driver.
+  Na T4 observada, Torch informou 15.637.086.208 bytes (~14,56 GiB), apesar dos
+  15360 MiB no nvidia-smi. Esse piso não garante memória de pico suficiente.
+  Uma operação FP16 com a distribuição CUDA 12.9 foi executada com sucesso
+  no driver 580.82.07; o treino completo ainda precisa terminar.
 
 O ambiente Python separado evita herdar conflitos de pacotes; não é um
 sandbox de segurança e mantém o acesso da sessão ao Drive montado.
