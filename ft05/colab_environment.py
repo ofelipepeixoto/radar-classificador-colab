@@ -52,6 +52,16 @@ def runtime_python(environment):
     return Path(environment) / 'bin/python'
 
 
+def _pip_command(executable):
+    """Use the kernel's pip to manage only the explicit, isolated interpreter.
+
+    Colab may omit ensurepip. pip's --python option supports a venv that has no
+    pip of its own; installation still targets that venv, never the kernel.
+    """
+    return [sys.executable, '-I', '-m', 'pip', '--python', str(executable),
+            '--disable-pip-version-check']
+
+
 def _check_venv(environment):
     environment = Path(environment)
     if environment.is_symlink() or environment.resolve() != environment.absolute():
@@ -95,12 +105,13 @@ def install_environment(environment, repo=ROOT):
     if not environment.exists():
         if environment.is_symlink() or environment.resolve() != environment.absolute():
             raise ValueError('environment_path_alias')
-        subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True, timeout=120)
+        subprocess.run([sys.executable, '-I', '-m', 'venv', '--without-pip', str(environment)],
+                       check=True, timeout=120)
         (environment / MARKER).write_text(json.dumps({'backend': BACKEND}))
     executable = _check_venv(environment)
-    subprocess.run([str(executable), '-I', '-m', 'pip', 'install', '--require-hashes',
-                    '--only-binary=:all:', '--no-index', '-r',
-                    str(Path(repo) / 'requirements-colab-lock.txt')], check=True, timeout=1800)
+    subprocess.run(_pip_command(executable) + ['install', '--require-hashes',
+                   '--only-binary=:all:', '--no-index', '-r',
+                   str(Path(repo) / 'requirements-colab-lock.txt')], check=True, timeout=1800)
 
 
 def validate_environment(environment, repo=ROOT, *, check_cuda=True):
@@ -112,7 +123,7 @@ def validate_environment(environment, repo=ROOT, *, check_cuda=True):
     if wrong:
         raise ValueError('Instale o ambiente isolado antes de continuar: ' + ', '.join(wrong))
     executable = _check_venv(environment)
-    check = subprocess.run([str(executable), '-I', '-m', 'pip', 'check'],
+    check = subprocess.run(_pip_command(executable) + ['check'],
                            capture_output=True, text=True, timeout=60)
     if check.returncode:
         raise ValueError('Conflitos no ambiente isolado: ' + check.stdout + check.stderr)

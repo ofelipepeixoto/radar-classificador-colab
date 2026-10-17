@@ -31,6 +31,8 @@ Esses testes não instalam a stack de treino, não baixam pesos e não executam 
 
 A rota atual usa Transformers + PEFT + TRL em ambiente isolado, com LoRA em 16 bits. Ao alterar dependências, mantenha coerentes `ft05/dependencies.py`, as versões diretas em `requirements-colab.txt` e o lock completo `requirements-colab-lock.txt`. O lock é específico para Python 3.12/Linux x86_64 e requer resolução e revisão de hashes. Não copie pacotes do kernel nem use `--system-site-packages` para contornar conflitos.
 
+O helper cria o ambiente com `venv --without-pip` e usa o pip do kernel com `--python` apontando ao ambiente isolado. Não suponha que `env/bin/python -m pip` funcione. Preserve essa separação e os hashes ao alterar a instalação; para o usuário do tutorial, as células fazem essas operações.
+
 O teste real opcional usa um modelo Qwen minúsculo aleatório, local e CPU: verifica um passo de backward/AdamW em LoRA, gravação, reabertura, geração e preparação de dados pelo construtor `SFTTrainer`. **Não chama `SFTTrainer.train()`**, cujo caminho depende de Triton/CUDA nessa versão. O teste exige as bibliotecas instaladas em ambiente separado e pode ser executado com `RUN_HF_CPU_INTEGRATION=1` junto do comando de testes. Não baixa a base 1,5B, não substitui homologação na GPU e não mede a qualidade do classificador.
 
 Quando mudar o notebook ou seu gerador, mantenha os dois consistentes e registre o que foi executado no Colab. Uma alteração somente documental não exige treinar novamente. Teste o caminho afetado pela alteração.

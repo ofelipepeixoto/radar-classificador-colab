@@ -64,7 +64,11 @@ O notebook usa Transformers + PEFT + TRL para treinar LoRA em 16 bits, sem Unslo
 
 A instalação cria `/content/radar-classificador-env-hf`: um ambiente Python separado, **sem herdar os pacotes já instalados no Colab**. O arquivo `requirements-colab-lock.txt` fixa 94 distribuições com hashes para Python 3.12/Linux x86_64. O plano já vem resolvido: `REVISAR_PLANO` mostra suas versões e hashes sem baixar a distribuição CUDA. A resolução foi conferida sem GPU; instalar e executar na GPU ainda são etapas de homologação.
 
-Use as células fornecidas para revisar, instalar e conferir o ambiente. A instalação baixa apenas as URLs diretas do lock e exige os hashes; o kernel Colab não é alterado e não precisa ser reiniciado. Não rode `%pip install` no kernel para consertar esse ambiente separado. Treino e inferência são enviados ao Python isolado, e o `pip check` relevante é o desse ambiente. Um aviso antigo do IPython sobre `jedi` no kernel não deve levar a alterar os pacotes do treinamento.
+Use as células fornecidas para revisar, instalar e conferir o ambiente. Elas criam o ambiente sem pip próprio e usam o pip disponível no Colab para gerenciar **somente o Python isolado**. Isso contorna a ausência de `ensurepip` em algumas sessões, mantendo as mesmas 94 dependências fixadas.
+
+A instalação baixa apenas as URLs diretas do lock e exige os hashes; os pacotes do kernel Colab não são alterados e não precisam de reinício por essa instalação. Não rode `%pip install` no kernel nem `python -m pip` pelo Python isolado para consertá-lo: as células já direcionam instalação e conferência ao ambiente correto. Um aviso antigo do IPython sobre `jedi` no kernel não deve levar a alterar os pacotes do treinamento.
+
+Na verificação de GPU, a receita seleciona BF16 somente quando há suporte nativo; a T4 deve usar FP16. Confira a precisão exibida antes de treinar. A instalação só está concluída quando a célula confirma versões, `pip check` e CUDA; montar o Drive e preparar o corpus não comprova essas etapas.
 
 Datasets `5.0.1` remove a pendência da versão antiga usada no piloto. Há um risco residual em Accelerate para checkpoints fragmentados; o projeto restringe a entrada à base fixada e ao adaptador local selado do seu próprio treino. Isso não significa que Accelerate foi corrigido; veja [SECURITY.md](../SECURITY.md#risco-residual-em-accelerate). Não carregue datasets ou pesos externos neste fluxo.
 
@@ -107,11 +111,13 @@ Aqui, **reabrir** significa carregar um adaptador já concluído para fazer infe
 | Código ausente | Execute a etapa de obtenção do código antes das importações |
 | Drive indisponível | Execute a montagem e confira a conta e a `PASTA_PROJETO` |
 | `PackageNotFoundError` ou Python isolado ausente | Conclua a instalação pela célula fornecida; não instale no kernel com `%pip` |
+| Erro antigo sobre `ensurepip` | Use a cópia atualizada do notebook e repita a célula de instalação; o fluxo atual cria o ambiente sem pip próprio |
 | Versões divergentes | Preserve a saída e confira o diagnóstico antes de continuar |
 | Pasta de execução já existe | Preserve a tentativa; investigue o erro e escolha novo nome se for treinar novamente |
 | Hash ou procedência não confere | Não edite o manifesto; confira os caminhos e use os arquivos originais da mesma execução |
 | JSON inválido ou prioridade inesperada | Registre o comportamento como erro do modelo; a interface funcionar não garante o rótulo correto |
 | Widgets não aparecem | Confira a saída da célula de interface e se as verificações anteriores passaram |
+| Interface informa que o processo foi encerrado | Execute novamente a célula `ABRIR_INTERFACE` para reabrir o mesmo adaptador; isso não inicia treino |
 
 Ao abrir uma issue, inclua a etapa, o commit, as versões, GPU e erro completo após remover nomes, caminhos pessoais e tokens. Não envie seu Drive inteiro ou pesos do modelo.
 

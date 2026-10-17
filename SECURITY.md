@@ -23,6 +23,10 @@ Hashes permitem detectar mudanças nos bytes. Eles não autenticam arquivos rece
 
 Treino e inferência usam Transformers + PEFT + TRL em `/content/radar-classificador-env-hf`, um ambiente sem `system-site-packages`. O kernel Colab não recebe esses pacotes. Esse isolamento evita herdar conflitos do kernel; **não é uma barreira de segurança** contra código malicioso e mantém as permissões de acesso do processo, inclusive ao Drive montado.
 
+O ambiente é criado com `venv --without-pip`. O pip já disponível no kernel é chamado com `--python` apontando ao Python isolado, conforme a [documentação oficial do pip](https://pip.pypa.io/en/stable/topics/python-option/). Assim, não se depende de `ensurepip` no Colab e a instalação continua restrita ao destino isolado, com o mesmo lock. Os processos de inferência usam `-B` para não gerar bytecode no código conferido.
+
+O treino só pode ser declarado concluído após as verificações de passos, perdas e métricas finitas; a seleção BF16 exige suporte nativo, usando FP16 quando ele não existe. Esses controles precisam passar na homologação real e não substituem avaliar a qualidade do adaptador.
+
 Fixar versões e hashes não comprova que todos os pacotes são seguros ou que funcionarão em qualquer runtime. A resolução sem GPU não valida CUDA, driver, memória ou treinamento. Mudanças de dependência devem ser revisadas e testadas em sessão limpa.
 
 ## Limites de uso

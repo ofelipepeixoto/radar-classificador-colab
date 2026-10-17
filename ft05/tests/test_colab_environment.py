@@ -2,6 +2,7 @@
 import builtins
 import copy
 import hashlib
+import importlib.metadata
 import json
 import shutil
 import subprocess
@@ -208,13 +209,14 @@ class ColabEnvironmentTests(unittest.TestCase):
                 environment.validate_environment(path, self.repo)
             self.assertEqual(run.call_count, 2)
             self.assertEqual(run.call_args.args[0],
-                [str(path / 'bin/python'), '-I', '-m', 'pip', 'check'])
+                [sys.executable, '-I', '-m', 'pip', '--python',
+                 str(path / 'bin/python'), '--disable-pip-version-check', 'check'])
 
     def test_install_only_creates_venv_with_base_python_and_installs_in_venv(self):
         path = self.root / 'fresh'
 
         def fake_process(command, **kwargs):
-            if command[:3] == [sys.executable, '-m', 'venv']:
+            if command[:4] == [sys.executable, '-I', '-m', 'venv']:
                 self.make_environment(path)
             return SimpleNamespace(returncode=0)
 
@@ -223,8 +225,11 @@ class ColabEnvironmentTests(unittest.TestCase):
             environment.install_environment(path, self.repo)
         self.assertEqual(run.call_count, 2)
         create, install = [call.args[0] for call in run.call_args_list]
-        self.assertEqual(create, [sys.executable, '-m', 'venv', str(path)])
-        self.assertEqual(install[:5], [str(path / 'bin/python'), '-I', '-m', 'pip', 'install'])
+        self.assertEqual(create,
+            [sys.executable, '-I', '-m', 'venv', '--without-pip', str(path)])
+        self.assertEqual(install[:8],
+            [sys.executable, '-I', '-m', 'pip', '--python',
+             str(path / 'bin/python'), '--disable-pip-version-check', 'install'])
         for flag in ('--require-hashes', '--only-binary=:all:', '--no-index'):
             self.assertIn(flag, install)
         self.assertNotIn('--no-deps', install)
@@ -253,11 +258,59 @@ class ColabEnvironmentTests(unittest.TestCase):
         self.assertEqual(summary['training_backend'], BACKEND)
         self.assertEqual(run.call_count, 3)
         for call in run.call_args_list:
-            self.assertEqual(call.args[0][0], str(path / 'bin/python'))
             self.assertIn('-I', call.args[0])
+        self.assertEqual(run.call_args_list[0].args[0][0], str(path / 'bin/python'))
+        self.assertEqual(run.call_args_list[1].args[0][0], sys.executable)
+        self.assertEqual(run.call_args_list[1].args[0][4:6],
+                         ['--python', str(path / 'bin/python')])
+        self.assertEqual(run.call_args_list[2].args[0][0], str(path / 'bin/python'))
         self.assertIn('require_packages();', run.call_args.args[0][-2])
         self.assertIn('cuda_runtime()', run.call_args.args[0][-2])
         self.assertEqual(run.call_args.args[0][-1], str(self.repo / 'ft05'))
+
+    def test_existing_unmarked_partial_environment_is_not_repurposed(self):
+        path = self.make_environment()
+        (path / environment.MARKER).unlink()
+        with patch.object(environment, 'check_platform'), \
+                patch.object(environment.subprocess, 'run') as run:
+            with self.assertRaises(FileNotFoundError):
+                environment.install_environment(path, self.repo)
+            run.assert_not_called()
+        self.assertTrue(path.is_dir())
+
+    def test_real_venv_without_pip_accepts_kernel_pip_target_check_without_network(self):
+        path = self.root / 'real-without-pip'
+        kernel_before = sorted((row.metadata['Name'], row.version)
+                               for row in importlib.metadata.distributions()
+                               if row.metadata['Name'])
+        subprocess.run([sys.executable, '-I', '-m', 'venv', '--without-pip', str(path)],
+                       check=True, capture_output=True, text=True, timeout=60)
+        (path / environment.MARKER).write_text(json.dumps({'backend': BACKEND}))
+
+        code = ('import importlib.util,json,sys; '
+                'print(json.dumps({"prefix":sys.prefix,"base_prefix":sys.base_prefix,'
+                '"pip":importlib.util.find_spec("pip") is not None,'
+                '"torch":importlib.util.find_spec("torch") is not None}))')
+        before = subprocess.run([str(path / 'bin/python'), '-I', '-c', code],
+                                check=True, capture_output=True, text=True, timeout=30)
+        state = json.loads(before.stdout)
+        self.assertEqual(Path(state['prefix']).resolve(), path.resolve())
+        self.assertNotEqual(state['prefix'], state['base_prefix'])
+        self.assertFalse(state['pip'])
+        self.assertFalse(state['torch'])
+        self.assertEqual(environment.environment_status(path), {})
+
+        result = subprocess.run(environment._pip_command(path / 'bin/python') + ['check'],
+                                check=True, capture_output=True, text=True, timeout=60)
+        self.assertIn('No broken requirements found.', result.stdout)
+        self.assertEqual(environment.environment_status(path), {})
+        after = subprocess.run([str(path / 'bin/python'), '-I', '-c', code],
+                               check=True, capture_output=True, text=True, timeout=30)
+        self.assertEqual(json.loads(after.stdout), state)
+        kernel_after = sorted((row.metadata['Name'], row.version)
+                              for row in importlib.metadata.distributions()
+                              if row.metadata['Name'])
+        self.assertEqual(kernel_after, kernel_before)
 
     def test_validation_without_cuda_does_not_start_gpu_process(self):
         path = self.make_environment()

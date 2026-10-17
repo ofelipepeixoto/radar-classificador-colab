@@ -245,6 +245,9 @@ if ABRIR_INTERFACE:
     requested_identity = (str(RUN_DIR.resolve()), hashlib.sha256((RUN_DIR / 'run.json').read_bytes()).hexdigest())
     if 'panel' in globals() and globals().get('panel_identity') != requested_identity:
         raise ValueError('Outra execução já está carregada. Reinicie a sessão para trocar de adaptador.')
+    if 'panel' in globals() and getattr(getattr(panel, '_ft05_worker', None), 'closed', True):
+        panel.close()
+        del panel
     if 'panel' not in globals():
         from colab_ui import launch
         panel = launch(ENV_PYTHON, RUN_DIR, CORPUS, FROZEN)

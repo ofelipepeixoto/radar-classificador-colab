@@ -171,6 +171,7 @@ for line in sys.stdin:
     def test_one_process_reused_and_paths_bound(self):
         child = self.worker()
         process = child._process
+        self.assertIn('-B', process.args)
         self.assertEqual(child.classify('Mensagem fictícia')['labels']['urgencia'], 'media')
         self.assertEqual(child.classify('Outra mensagem fictícia')['labels']['categoria'], 'entrega')
         self.assertIs(child._process, process)

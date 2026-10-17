@@ -21,9 +21,10 @@ class HfCpuIntegrationTests(unittest.TestCase):
         from peft import LoraConfig, PeftModel, get_peft_model
         from tokenizers import Tokenizer, models, pre_tokenizers
         from transformers import PreTrainedTokenizerFast, Qwen2Config, Qwen2ForCausalLM, set_seed
-        from trl import SFTConfig, SFTTrainer
+        from trl import SFTTrainer
         from adapter_integrity import adapter_hashes, verify_adapter
-        from train import MODEL, REVISION, LORA_TARGETS, generate_response, MAX_NEW_TOKENS
+        from train import (MODEL, REVISION, LORA_TARGETS, generate_response,
+                           build_sft_config, MAX_NEW_TOKENS, MAX_CONTEXT)
 
         set_seed(3407)
         vocab = {'[PAD]': 0, '[EOS]': 1, '[UNK]': 2, 'pedido': 3,
@@ -66,10 +67,12 @@ class HfCpuIntegrationTests(unittest.TestCase):
                                 for name, value in model.named_parameters() if name in before))
             # Validate real TRL + Datasets constructor/preparation APIs. Its
             # fused training kernel is CUDA-only and is not exercised here.
-            args = SFTConfig(output_dir=str(root / 'checkpoints'), dataset_text_field='text',
-                max_length=64, max_steps=1, per_device_train_batch_size=1,
-                optim='adamw_torch', use_cpu=True, bf16=False, fp16=False,
-                report_to='none', packing=False, save_strategy='no')
+            args = build_sft_config(root, {'device': 'cpu', 'precision': 'fp32'})
+            self.assertEqual(args.max_length, MAX_CONTEXT)
+            self.assertEqual(args.optim.value, 'adamw_torch')
+            self.assertFalse(args.fp16)
+            self.assertFalse(args.bf16)
+            self.assertTrue(args.gradient_checkpointing)
             trainer = SFTTrainer(model=model, args=args, processing_class=tokenizer,
                 train_dataset=Dataset.from_dict({'text': [
                     'user pedido entrega [EOS] assistant entrega media [EOS]']}))

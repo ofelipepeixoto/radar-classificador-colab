@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import math
 import time
 from pathlib import Path
 
@@ -46,7 +47,8 @@ def cuda_runtime():
     properties = torch.cuda.get_device_properties(0)
     if properties.total_memory < MIN_GPU_BYTES:
         raise ValueError('gpu_memory_too_small: esta receita requer uma GPU de classe 16 GB ou maior')
-    bf16 = torch.cuda.is_bf16_supported()
+    # Allocation/emulation alone is insufficient for the fused training kernels.
+    bf16 = torch.cuda.is_bf16_supported(including_emulation=False)
     return {'device': 'cuda:0', 'name': properties.name,
             'total_memory_bytes': properties.total_memory,
             'compute_capability': list(torch.cuda.get_device_capability(0)),
@@ -132,6 +134,47 @@ def infer(model, tokenizer, rows):
     return score, predictions
 
 
+def build_sft_config(output, runtime):
+    """Construct the exact pinned TRL recipe, separately testable without CUDA."""
+    from trl import SFTConfig
+    return SFTConfig(output_dir=str(Path(output) / 'checkpoints'), dataset_text_field='text',
+        max_length=MAX_CONTEXT, per_device_train_batch_size=2, gradient_accumulation_steps=4,
+        num_train_epochs=3, learning_rate=2e-4, optim='adamw_torch',
+        bf16=runtime['precision'] == 'bf16', fp16=runtime['precision'] == 'fp16',
+        use_cpu=runtime['device'] == 'cpu',
+        gradient_checkpointing=True, gradient_checkpointing_kwargs={'use_reentrant': False},
+        report_to='none', seed=SEED, data_seed=SEED, packing=False,
+        save_strategy='epoch', save_total_limit=2)
+
+
+def checked_training_metrics(train_output, trainer):
+    """Reject an incomplete/nonfinite run before declaring a saved model trained."""
+    step = getattr(train_output, 'global_step', None)
+    loss = getattr(train_output, 'training_loss', None)
+    if type(step) is not int or step <= 0:
+        raise ValueError('training_did_not_complete_a_step')
+    if type(loss) not in (int, float) or not math.isfinite(loss):
+        raise ValueError('training_loss_not_finite')
+    metrics = getattr(train_output, 'metrics', None)
+    if type(metrics) is not dict:
+        raise ValueError('training_metrics_missing')
+    history = getattr(getattr(trainer, 'state', None), 'log_history', [])
+    observed = []
+    for row in [metrics, *history]:
+        values = {}
+        for key in ('loss', 'train_loss', 'grad_norm'):
+            if key in row and row[key] is not None:
+                value = row[key]
+                if type(value) not in (int, float) or not math.isfinite(value):
+                    raise ValueError('nonfinite_training_metric_' + key)
+                values[key] = value
+        if values:
+            observed.append(values)
+    return {'global_step': step, 'training_loss': loss, 'metrics': metrics,
+            'observed_loss_and_gradient_logs': observed,
+            'gradient_logs_checked': sum('grad_norm' in row for row in observed)}
+
+
 def run(dataset, config_path, output, execute=False, frozen_dir=None):
     rows = load(dataset)
     parts = split(rows)
@@ -159,7 +202,7 @@ def run(dataset, config_path, output, execute=False, frozen_dir=None):
     from transformers import set_seed
     from datasets import Dataset
     from peft import LoraConfig, get_peft_model
-    from trl import SFTTrainer, SFTConfig
+    from trl import SFTTrainer
     set_seed(SEED)
     model, tokenizer, loaded_name = load_pinned_model(config['model_revision'], runtime=runtime)
     texts = {name: [tokenizer.apply_chat_template(row['messages'], tokenize=False,
@@ -177,19 +220,19 @@ def run(dataset, config_path, output, execute=False, frozen_dir=None):
                       base_model_name_or_path=MODEL, revision=config['model_revision'])
     model = get_peft_model(model, lora)
     model.config.use_cache = False
-    args = SFTConfig(output_dir=str(output / 'checkpoints'), dataset_text_field='text',
-        max_length=MAX_CONTEXT, per_device_train_batch_size=2, gradient_accumulation_steps=4,
-        num_train_epochs=3, learning_rate=2e-4, optim='adamw_torch',
-        bf16=runtime['precision'] == 'bf16', fp16=runtime['precision'] == 'fp16',
-        gradient_checkpointing=True, gradient_checkpointing_kwargs={'use_reentrant': False},
-        report_to='none', seed=SEED, data_seed=SEED, packing=False,
-        save_strategy='epoch', save_total_limit=2, save_safetensors=True)
+    args = build_sft_config(output, runtime)
     trainer = SFTTrainer(model=model, args=args, processing_class=tokenizer,
         train_dataset=Dataset.from_dict({'text': texts['train']}),
         eval_dataset=Dataset.from_dict({'text': texts['validation']}))
-    trainer.train()
+    train_output = trainer.train()
+    training_metrics = checked_training_metrics(train_output, trainer)
+    training_metrics_file = output / 'training-metrics.json'
+    training_metrics_file.write_text(json.dumps(training_metrics, indent=2, allow_nan=False))
     validation = trainer.evaluate()
-    (output / 'validation.json').write_text(json.dumps(validation, indent=2))
+    validation_loss = validation.get('eval_loss')
+    if type(validation_loss) not in (int, float) or not math.isfinite(validation_loss):
+        raise ValueError('validation_loss_not_finite')
+    (output / 'validation.json').write_text(json.dumps(validation, indent=2, allow_nan=False))
     finetuned, after = infer(model, tokenizer, parts['test'])
     (output / 'model-finetuned.json').write_text(json.dumps(finetuned, indent=2))
     (output / 'predictions-model-personalized.json').write_text(json.dumps(after, indent=2))
@@ -207,6 +250,9 @@ def run(dataset, config_path, output, execute=False, frozen_dir=None):
         'training_backend': TRAINING_BACKEND, 'precision': runtime['precision'],
         'quantization': False, 'compute': {k: v for k, v in runtime.items() if k != 'dtype'},
         'seed': SEED, 'max_context': MAX_CONTEXT, 'max_new_tokens': MAX_NEW_TOKENS,
+        'training_global_step': training_metrics['global_step'],
+        'training_loss': training_metrics['training_loss'],
+        'training_metrics_sha256': hashlib.sha256(training_metrics_file.read_bytes()).hexdigest(),
         'versions': versions, 'adapter_artifacts_sha256': adapter_artifacts,
         'dataset_sha256': hashlib.sha256(Path(dataset).read_bytes()).hexdigest(),
         'frozen_manifest_sha256': frozen_sha256,

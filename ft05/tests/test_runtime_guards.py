@@ -47,9 +47,10 @@ class RuntimeGuardsTests(unittest.TestCase):
         class Trainer:
             def __init__(self, **kwargs):
                 trainer_calls.append(kwargs)
+                self.state = SimpleNamespace(log_history=[{'loss': 0.1, 'grad_norm': 0.2}])
 
             def train(self):
-                pass
+                return SimpleNamespace(global_step=3, training_loss=0.1, metrics={'train_loss': 0.1})
 
             def evaluate(self):
                 return {'eval_loss': 0.0}
@@ -92,6 +93,8 @@ class RuntimeGuardsTests(unittest.TestCase):
             self.assertEqual(manifest['training_backend'], TRAINING_BACKEND)
             self.assertFalse(manifest['quantization'])
             self.assertEqual(manifest['precision'], 'bf16')
+            self.assertEqual(manifest['training_global_step'], 3)
+            self.assertTrue((output / 'training-metrics.json').is_file())
             self.assertIs(model.safe_serialization, True)
             self.assertIs(model.save_embedding_layers, False)
             self.assertEqual(lora_calls[0]['lora_dropout'], 0.0)

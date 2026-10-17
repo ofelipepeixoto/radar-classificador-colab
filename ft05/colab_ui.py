@@ -53,7 +53,7 @@ class RuntimeWorker:
         self._lock = threading.Lock()
         self._request_lock = threading.Lock()
         source = Path(worker_path) if worker_path is not None else Path(__file__).with_name('runtime_worker.py')
-        command = [self.identity[0], '-I', '-u', str(source.resolve()),
+        command = [self.identity[0], '-I', '-B', '-u', str(source.resolve()),
                    '--run-dir', self.identity[1], '--corpus', self.identity[2], '--frozen', self.identity[3]]
         try:
             self._process = subprocess.Popen(

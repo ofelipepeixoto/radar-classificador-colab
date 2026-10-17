@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from dependencies import VERSIONS
 from train import (MODEL, REVISION, MIN_GPU_BYTES, MAX_CONTEXT, MAX_NEW_TOKENS,
-                   check_config, cuda_runtime, generate_response, infer)
+                   check_config, checked_training_metrics, cuda_runtime, generate_response, infer)
 
 
 class HfBackendTests(unittest.TestCase):
@@ -15,7 +15,8 @@ class HfBackendTests(unittest.TestCase):
                 is_available=lambda: True,
                 get_device_properties=lambda device: SimpleNamespace(
                     name='GPU-double', total_memory=MIN_GPU_BYTES),
-                is_bf16_supported=lambda: bf16, get_device_capability=lambda device: (8, 0)))
+                is_bf16_supported=lambda *, including_emulation: bf16 if not including_emulation else True,
+                get_device_capability=lambda device: (8, 0)))
             with self.subTest(bf16=bf16), patch.dict('sys.modules', {'torch': fake}):
                 self.assertEqual(cuda_runtime()['precision'], 'bf16' if bf16 else 'fp16')
         fake.cuda.is_available = lambda: False
@@ -28,6 +29,17 @@ class HfBackendTests(unittest.TestCase):
         with patch.dict('sys.modules', {'torch': fake}):
             with self.assertRaisesRegex(ValueError, 'gpu_memory_too_small'):
                 cuda_runtime()
+
+    def test_training_requires_steps_and_finite_loss_and_gradient_logs(self):
+        output = SimpleNamespace(global_step=3, training_loss=1.2, metrics={'train_loss': 1.2})
+        trainer = SimpleNamespace(state=SimpleNamespace(log_history=[{'loss': 1.3, 'grad_norm': 0.2}]))
+        self.assertEqual(checked_training_metrics(output, trainer)['gradient_logs_checked'], 1)
+        for step, loss in ((0, 1.0), (3, float('nan')), (3, float('inf'))):
+            with self.subTest(step=step, loss=loss), self.assertRaises(ValueError):
+                checked_training_metrics(SimpleNamespace(global_step=step, training_loss=loss, metrics={}), trainer)
+        trainer.state.log_history = [{'grad_norm': float('inf')}]
+        with self.assertRaisesRegex(ValueError, 'nonfinite_training_metric_grad_norm'):
+            checked_training_metrics(output, trainer)
 
     def test_export_and_unsafe_dependency_pins_are_refused(self):
         config = {'model': MODEL, 'model_revision': REVISION, 'synthetic_only': True,

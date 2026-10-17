@@ -14,6 +14,10 @@ são resultados do novo backend; seu desempenho ainda precisa ser medido.
 
 - Ambiente dedicado `/content/radar-classificador-env-hf`, sem
   `system-site-packages`. Os pacotes do kernel Colab não são substituídos.
+- Criação com `venv --without-pip`: o pip do kernel gerencia o Python do
+  ambiente por `--python`, conforme a [documentação oficial do pip](https://pip.pypa.io/en/stable/topics/python-option/).
+  Essa correção contorna a ausência observada de `ensurepip`, sem instalar
+  pip dentro do ambiente nem acrescentar dependências ao lock.
 - `requirements-colab-lock.txt`: 94 distribuições com URLs diretas e hashes,
   específicas para Python 3.12/Linux x86_64. O instalador exige
   `--require-hashes` e `--no-index`; `ft05/environment-lock.json` registra a
@@ -50,12 +54,27 @@ Consulte [SECURITY.md](../SECURITY.md#risco-residual-em-accelerate) e o
 | Verificação | Evidência disponível |
 | --- | --- |
 | Resolução do ambiente | 94 distribuições resolvidas e hashes registrados para Python 3.12/Linux x86_64, sem GPU |
-| Testes offline atuais | 89 testes: 88 aprovados e 1 integração HF opcional omitida; executada separadamente com sucesso abaixo. Dois notebooks validados com nbformat |
+| Testes offline após os ajustes de homologação | 93 testes: 92 aprovados e 1 integração HF opcional omitida; a integração real anterior está registrada separadamente abaixo. Dois notebooks validados com nbformat |
 | Auditoria transitiva | [Consulta OSV e limites](dependency-audit-2026-10-17.json): 94 distribuições sem correspondência no feed; Torch normalizado para 2.13.0. Não analisa binários CUDA; inspeção manual encontrou o residual Accelerate |
 | Análise estática | Bandit 1.9.4: 20 observações baixas, nenhuma média/alta. Chamadas subprocesso usam listas, sem shell; caminhos de script são locais conferidos. Uso de random é para separar exemplos, sem função criptográfica |
 | Integração real Hugging Face em CPU | 1 teste aprovado em 3,649 s: Qwen minúsculo aleatório e local, backward + AdamW alteraram parâmetros LoRA; `SFTTrainer` + Datasets `5.0.1` prepararam `input_ids`; safetensors gravado, selado e reaberto com logits iguais; geração real sem conflito `max_length`/`max_new_tokens`. `socket.connect` bloqueado e não chamado |
-| Homologação Colab | Pendente na [issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2): instalar em sessão limpa, treinar com GPU, salvar, encerrar a sessão e reabrir o adaptador em outra sessão |
+| Ambiente Colab observado | Python `3.12.13`, T4 com `15.360 MiB`, driver `580.82.07`, pip do kernel `24.1.2`. Montagem do Drive e preparação dos 208 exemplos concluídas, com hashes originais preservados. Instalação completa e treino ainda não confirmados |
+| Homologação Colab | Pendente na [issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2): concluir instalação e validação CUDA, treinar com GPU, salvar, encerrar a sessão e reabrir o adaptador em outra sessão |
 | Qualidade do novo adaptador | Ainda não medida. Não reutilizar a pontuação histórica como evidência desta rota |
+
+### Ajustes encontrados durante a homologação
+
+| Falha ou limite | Tratamento preparado | Validação restante |
+| --- | --- | --- |
+| Colab retornou `No module named ensurepip` ao criar venv com pip | Criar venv sem pip e usar o pip do kernel com destino `--python` explícito; pacotes do kernel e lock de 94 distribuições preservados. Testes do helper passaram com venv real sem pip e sem rede | Confirmar instalação completa no Colab |
+| Opção `save_safetensors` ausente na API de `SFTConfig` fixada | Remover a opção do construtor; manter gravação explícita do adaptador em safetensors | Executar treinamento real com a versão fixada |
+| BF16 aceito por emulação em GPU sem suporte nativo | Consultar `including_emulation=False`; T4 seleciona FP16 | Conferir saída CUDA e treinamento na T4 |
+| Uma execução incompleta ou com métricas não finitas poderia parecer concluída | Verificar passos de otimizador, perdas e métricas antes de declarar o treino salvo | Exercitar treino real e conferir seus metadados |
+| Processo encerrado deixava painel indisponível; bytecode poderia surgir na inferência | Permitir reabrir painel encerrado e iniciar worker com `-B` | Verificar interface após treino e em sessão nova |
+
+Esses ajustes não significam que `SFTTrainer.train()` já rodou no Colab.
+Nenhuma instalação completa ou pontuação do novo backend é afirmada a partir
+da montagem do Drive e da preparação do corpus.
 
 O teste CPU executou operações reais de Transformers e PEFT e o construtor/
 preparo de dados do TRL. **Não executou `SFTTrainer.train()`**: o caminho de

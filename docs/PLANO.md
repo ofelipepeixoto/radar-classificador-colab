@@ -16,6 +16,7 @@ O repositório contém somente o material necessário ao FT05. O `radar-model-ro
 | Interface pessoal usada no navegador | Respostas de categoria/urgência relatadas pelo autor; GPU no Colab |
 | Nova rota Transformers + PEFT + TRL | LoRA em 16 bits, sem Unsloth; mesma base fixada e mesmo corpus sintético; desempenho ainda a medir |
 | Lock do novo ambiente | 94 distribuições resolvidas com hashes para Python 3.12/Linux x86_64, sem GPU; não comprova execução CUDA |
+| Homologação iniciada | Colab Python 3.12.13 e T4, 15.360 MiB, driver 580.82.07; Drive montado e corpus de 208 casos com hashes preservados. Instalação completa e treino ainda não confirmados |
 | Integração real CPU | 1 teste aprovado em 3,649 s: atualização LoRA, gravação e reabertura com logits iguais, geração e preparo de dados TRL; sem baixar a base 1,5B e sem executar `SFTTrainer.train()` |
 | Novo fluxo separado em GPU | Execução completa em segunda conta e pasta nova ainda pendente na issue #2 |
 
@@ -42,7 +43,7 @@ Use a conta de quem vai executar o exercício e uma pasta nova. Não copie `run-
 2. Obter o código e concluir os testes offline pelo notebook.
 3. Montar o próprio Drive e confirmar o destino novo.
 4. Preparar o corpus; conferir 208 exemplos, split 162/12/34 e revisão humana falsa.
-5. Revisar o plano fixado e instalar explicitamente no ambiente isolado; conferir 94 versões/hashes, `pip check`, GPU e driver. O kernel não é alterado e não requer reinício por essa instalação.
+5. Revisar o plano fixado e instalar explicitamente pelas células no ambiente isolado; conferir 94 versões/hashes, `pip check`, GPU e driver. O ambiente não tem pip próprio: o helper usa o pip do kernel com destino isolado explícito, sem alterar os pacotes do kernel.
 6. Confirmar o uso da GPU de classe 16 GB ou maior, registrar suporte a CUDA 12.9 e iniciar uma única execução nova de treino em 16 bits.
 7. Conferir adaptador, relatório, metadados e integridade no Drive.
 8. Abrir a interface e testar mensagens fictícias sem gravar dados reais no notebook.
