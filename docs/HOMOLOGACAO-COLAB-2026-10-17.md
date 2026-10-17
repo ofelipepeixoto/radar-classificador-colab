@@ -1,7 +1,7 @@
 # Homologação Colab — 17/10/2026
 
-Status: novo treino na GPU, verificação dos artefatos e dois testes na interface
-concluídos. A reinstalação e a reabertura em uma VM nova ainda estão pendentes.
+Status: novo treino na GPU, verificação dos artefatos e reabertura do adaptador
+em uma VM nova concluídos. Duas mensagens fictícias foram testadas em cada VM.
 Não é release nem validação para atendimento real.
 
 **Replicação por outro operador em uma segunda conta independente: ainda não
@@ -94,7 +94,7 @@ expectativas exploratórias, sem revisão independente; não formam uma métrica
 de qualidade. Os tempos pertencem à sessão observada, não são uma garantia
 de latência.
 
-## Encerramento e etapa ainda pendente
+## Encerramento e reabertura em sessão nova
 
 O worker foi encerrado. A tela **Gerenciar sessões → Nenhuma sessão ativa**
 confirmou o encerramento da VM original do Colab. Uma outra cópia de
@@ -102,17 +102,23 @@ confirmou o encerramento da VM original do Colab. Uma outra cópia de
 `3.12.13` e GPU T4. O código `d1a35409c2244206e9b772e6807c1fd6b1dae650`
 foi obtido e os testes passaram nessa VM.
 
-A montagem do Drive falhou por timeout no fluxo de autenticação Google,
-terminando em `ValueError: mount failed`. Uma nova tentativa teve o mesmo
-resultado. A janela do Google apresentou uma confirmação **Continuar** que
-exige interação manual; essa etapa foi solicitada ao operador e continua
-pendente. Nenhuma identidade de conta ou URL privada foi incluída neste registro.
+A montagem do Drive falhou inicialmente por timeout no fluxo de autenticação
+Google (`ValueError: mount failed`). Após a confirmação manual pelo operador,
+`drive.mount` concluiu e o preflight conferiu corpus, split e selo do adaptador
+existente. O plano de 94 pacotes manteve o SHA-256 acima. A instalação na VM
+nova passou por versões, `pip check` e operação CUDA na Tesla T4 em FP16,
+sem iniciar treinamento.
 
-Ainda falta concluir a montagem do Drive, instalar novamente o ambiente nessa VM, verificar os artefatos
-salvos e reabrir o mesmo adaptador pela interface, sem retreino. Só depois
-desse resultado o fluxo de reabertura poderá ser considerado homologado.
-Isso permanece separado da replicação por outro operador/segunda conta,
-que ainda não foi comprovada.
+O notebook `TESTAR-ADAPTADOR.ipynb` carregou o adaptador salvo na interface.
+As mesmas duas mensagens fictícias produziram, respectivamente,
+`pagamento / baixa` em 6.771 ms (primeira classificação) e
+`entrega / alta` em 893 ms. A interface ficou aberta para testes pessoais;
+os tempos são observações desta sessão, sem garantia de latência. O fluxo
+técnico de reabertura em VM nova foi concluído sem retreino.
+
+Nenhuma identidade de conta, URL privada ou peso foi incluído neste registro.
+A replicação por outro operador em segunda conta independente ainda não foi
+comprovada, assim como a revisão humana dos rótulos e das PRs.
 Continuar um treinamento interrompido a partir de checkpoint não faz parte
 deste teste e não está implementado.
 

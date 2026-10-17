@@ -2,16 +2,16 @@
 
 Crie e teste **seu próprio adaptador de IA** para classificar mensagens, usando a GPU do Google Colab e salvando os resultados no seu Google Drive. No computador, você usa o navegador.
 
-**Estado: projeto educacional experimental.** O novo treino na T4 e os testes de interface foram concluídos; a reinstalação e a reabertura do adaptador em uma VM nova ainda estão em homologação. Revisão das PRs e versão estável permanecem pendentes. Não está homologado para atendimento real.
+**Estado: projeto educacional experimental.** O novo treino na T4 e a reabertura do adaptador em uma VM nova foram concluídos. Revisão das PRs e versão estável permanecem pendentes. Não está homologado para atendimento real.
 
-**A replicação por outro operador em uma segunda conta independente ainda não foi comprovada.** Na VM nova, Python/GPU e código/testes passaram; a montagem do Drive está bloqueada por uma etapa de autenticação Google que exige interação manual. O registro não declara a reabertura concluída.
+**A replicação por outro operador em uma segunda conta independente ainda não foi comprovada.** Na VM nova, a confirmação manual do Drive permitiu reinstalar as dependências e reabrir o mesmo adaptador sem retreinar.
 
 A nova rota usa **Transformers + PEFT + TRL**, com LoRA em 16 bits e ambiente
 isolado. Ela remove a dependência de Unsloth e permite Datasets `5.0.1`.
 Há um [risco residual em Accelerate](SECURITY.md#risco-residual-em-accelerate),
 limitado pelo formato e pela origem dos pesos aceitos. A biblioteca não é
 declarada corrigida. O [registro de homologação](docs/HOMOLOGACAO-COLAB-2026-10-17.md)
-separa as etapas concluídas da reabertura ainda pendente.
+registra o treino e a reabertura concluídos e as etapas ainda pendentes.
 
 ## Comece por aqui
 
@@ -50,7 +50,7 @@ Ela recebe uma mensagem e devolve dois campos:
 
 O modelo base continua `Qwen/Qwen2.5-1.5B-Instruct`, na revisão fixada. O treinamento cria um adaptador LoRA sem quantização de 4/8 bits. A instalação usa um ambiente Python separado em `/content/radar-classificador-env-hf`, sem herdar os pacotes do kernel Colab. Treino e inferência rodam nesse ambiente; a interface continua no navegador.
 
-O lock contém 94 distribuições com hashes para Python 3.12/Linux x86_64. Além dos testes offline e da integração CPU com modelo minúsculo, a instalação, CUDA e o treinamento TRL foram executados na T4: **63 passos**, com perdas e registros de gradiente finitos. A interface respondeu a duas mensagens fictícias. A reabertura do adaptador em VM nova ainda precisa terminar; continuar um treinamento a partir de checkpoint não está implementado.
+O lock contém 94 distribuições com hashes para Python 3.12/Linux x86_64. Além dos testes offline e da integração CPU com modelo minúsculo, a instalação, CUDA e o treinamento TRL foram executados na T4: **63 passos**, com perdas e registros de gradiente finitos. O adaptador salvo foi reaberto após nova instalação em outra VM e a interface respondeu a duas mensagens fictícias. Continuar um treinamento a partir de checkpoint não está implementado.
 
 ## Dados e limites
 

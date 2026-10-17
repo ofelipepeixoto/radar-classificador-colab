@@ -19,17 +19,15 @@ O repositório contém somente o material necessário ao FT05. O `radar-model-ro
 | Homologação iniciada | Colab imagem 2026.07, Python 3.12.13 e T4, 15.360 MiB, driver 580.82.07. Corpus/split e selo dos pesos conferidos; 34 IDs e métricas recalculadas iguais ao relatório |
 | Novo resultado sintético | 30/34 (88,2%) de acerto exato e JSON válido 100%; separado dos resultados do piloto antigo, sem revisão humana ou validação real |
 | Integração real CPU | 1 teste aprovado em 3,649 s: atualização LoRA, gravação e reabertura com logits iguais, geração e preparo de dados TRL; sem baixar a base 1,5B e sem executar `SFTTrainer.train()` |
-| Interface e reabertura | Duas mensagens fictícias classificadas na sessão do treino; VM original encerrada. A nova VM passou em Python/GPU e código/testes, mas a montagem do Drive falhou por timeout da autenticação; confirmação manual Google, instalação e reabertura ainda pendentes na issue #2 |
+| Interface e reabertura | Duas mensagens fictícias classificadas na sessão do treino; VM original encerrada. Em VM nova com Python 3.12.13/T4, o operador concluiu a confirmação Google, montou o Drive, reinstalou as 94 dependências e reabriu o adaptador. A interface classificou mais duas mensagens sem retreino |
 | Replicação independente | Execução por outro operador em uma segunda conta independente ainda não comprovada; permanece uma etapa de homologação |
 
 O [registro de homologação](HOMOLOGACAO-COLAB-2026-10-17.md) separa a execução GPU concluída das etapas ainda pendentes. O resultado sintético não será usado para ajustar o treino pelos erros do teste congelado.
 
-O bloqueio atual da nova VM é a autenticação do Drive: `drive.mount` terminou
-com `ValueError: mount failed` após timeout; uma confirmação **Continuar** na
-janela do Google exige interação manual. Repetir a tentativa teve o mesmo
-resultado. Após concluir a confirmação, repetir somente a montagem e seguir
-as verificações do notebook; não registrar a reabertura como concluída antes
-de carregar o adaptador e testar a interface.
+A primeira montagem do Drive na VM nova terminou com `ValueError: mount failed`
+após timeout; a confirmação **Continuar** na janela do Google exigiu interação
+manual. O operador concluiu a confirmação e repetiu a célula de montagem. As
+verificações e a inferência com o adaptador salvo foram então concluídas.
 
 ## Etapas
 
@@ -38,7 +36,7 @@ de carregar o adaptador e testar a interface.
 | Separação | Código, testes, corpus sintético e documentos do FT05 | Origem registrada, licença mantida e ausência de arquivos privados |
 | Simplificação | `COMECE-AQUI.ipynb` e `TESTAR-ADAPTADOR.ipynb` | Instruções em português, ações desligadas por padrão, interface sem servidor externo |
 | Auditoria offline | Testes, revisão de caminhos, persistência, integridade e conteúdo público | Falhas concretas corrigidas e evidência registrada |
-| Dependências | Remover Unsloth, atualizar Datasets para `5.0.1` e fixar ambiente completo | Instalação isolada, CUDA e treino conferidos na T4; reabertura em VM nova ainda pendente. Tratamento da issue #3 proposto em PR sobre a PR #1 |
+| Dependências | Remover Unsloth, atualizar Datasets para `5.0.1` e fixar ambiente completo | Instalação isolada, CUDA, treino e reabertura em VM nova conferidos na T4. Tratamento da issue #3 proposto em PR sobre a PR #1 |
 | Risco residual | Documentar Accelerate e restringir formatos/origem dos pesos | Não alegar correção da biblioteca; verificar rejeição de índices externos, pickle e dispatch; acompanhar issue #5 |
 | Homologação Colab | Segunda conta autorizada e pasta nova | Todas as etapas abaixo concluídas com evidência |
 | Versão para comunidade | Tag e instruções ligadas à revisão homologada | Links conferidos e limitações visíveis |

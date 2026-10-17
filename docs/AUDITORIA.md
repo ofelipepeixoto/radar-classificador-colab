@@ -9,7 +9,7 @@ treino e inferência, atualiza Datasets para `5.0.1` e usa LoRA em 16 bits,
 sem quantização de 4/8 bits. A base Qwen na revisão fixa e o corpus sintético
 original não foram alterados. Os resultados históricos de 32/34 e 20/24 não
 são resultados do novo backend. O novo treino concluiu 30/34 acertos no teste
-sintético; a reabertura em VM nova ainda precisa terminar. O registro está em
+sintético; a reabertura em VM nova foi concluída sem retreino. O registro está em
 [HOMOLOGACAO-COLAB-2026-10-17.md](HOMOLOGACAO-COLAB-2026-10-17.md).
 
 ### Instalação e fronteiras
@@ -65,7 +65,7 @@ Consulte [SECURITY.md](../SECURITY.md#risco-residual-em-accelerate) e o
 | Ambiente Colab observado | Python `3.12.13`, T4 com `15.360 MiB`, driver `580.82.07`, pip do kernel `24.1.2`. Instalação de 94 pacotes, `pip check`, CUDA FP16 e gate integrado concluídos. Corpus e split originais preservados |
 | Treino e pós-verificação | Código `d1a35409c2244206e9b772e6807c1fd6b1dae650`, manifesto `398b105cd99c15e765f317e2f8026fad26c7b60550b18ea4964d8e192516bb8e`; 63 passos, 63 gradientes finitos, training loss `1.069351`, eval loss `0.683872`. Pesos/selo conferidos, 34 IDs e métricas recalculadas iguais ao relatório |
 | Interface na sessão do treino | Duas mensagens fictícias produziram `pagamento/baixa` e `entrega/alta`, com formato válido. Expectativas exploratórias, sem revisão independente; detalhes no registro de homologação |
-| Encerramento e reabertura | Worker encerrado e **Nenhuma sessão ativa** confirmou fim da VM original. Na VM nova, imagem 2026.07, Python 3.12.13/T4 e código/testes passaram. A montagem do Drive falhou por timeout da autenticação (`ValueError: mount failed`); confirmação manual Google, reinstalação e reabertura sem retreino continuam pendentes na [issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2) |
+| Encerramento e reabertura | Worker encerrado e **Nenhuma sessão ativa** confirmou fim da VM original. Na VM nova, imagem 2026.07, Python 3.12.13/T4, código/testes e montagem do Drive após confirmação manual passaram. Reinstalação dos 94 pacotes, `pip check`/CUDA FP16, selo e interface com duas mensagens concluídos sem retreino. [Registro](HOMOLOGACAO-COLAB-2026-10-17.md) |
 | Replicação independente | Execução por outro operador em uma segunda conta independente ainda não comprovada. Não inferir essa replicação a partir do treino com pasta nova ou da alocação de outra VM |
 | Resultado sintético do novo adaptador | 30/34 (88,2%) de acerto exato, JSON 100%, macro F1 categoria 0,9064 e urgência 0,9696. Base sem adaptador: acerto e JSON 0%; ambos os F1 iguais a 0. Não reutilizar a pontuação histórica nem ajustar o treino pelos erros do holdout |
 | CI do código treinado | [Execução 39065079145](https://github.com/ofelipepeixoto/radar-classificador-colab/actions/runs/39065079145) concluída com sucesso |
@@ -74,15 +74,15 @@ Consulte [SECURITY.md](../SECURITY.md#risco-residual-em-accelerate) e o
 
 | Falha ou limite | Tratamento preparado | Validação restante |
 | --- | --- | --- |
-| Colab retornou `No module named ensurepip` ao criar venv com pip | Criar venv sem pip e usar o pip do kernel com destino `--python` explícito; pacotes do kernel e lock de 94 distribuições preservados. Testes do helper passaram com venv real sem pip e sem rede | Instalação e `pip check` confirmados na sessão do treino; reinstalação em VM nova pendente |
+| Colab retornou `No module named ensurepip` ao criar venv com pip | Criar venv sem pip e usar o pip do kernel com destino `--python` explícito; pacotes do kernel e lock de 94 distribuições preservados. Testes do helper passaram com venv real sem pip e sem rede | Instalação e `pip check` confirmados na sessão do treino e na VM nova |
 | Opção `save_safetensors` ausente na API de `SFTConfig` fixada | Remover a opção do construtor; manter gravação explícita do adaptador em safetensors | Treinamento real e selo dos pesos confirmados |
 | BF16 aceito por emulação em GPU sem suporte nativo | Consultar `including_emulation=False`; T4 seleciona FP16 | CUDA FP16 e treino completo confirmados na T4 observada |
 | Uma execução incompleta ou com métricas não finitas poderia parecer concluída | Verificar passos de otimizador, perdas e métricas antes de declarar o treino salvo | 63 passos e 63 registros de gradiente finitos conferidos, com métricas recalculadas |
-| Processo encerrado deixava painel indisponível; bytecode poderia surgir na inferência | Permitir reabrir painel encerrado e iniciar worker com `-B` | Interface após treino confirmada; reabertura em VM nova pendente |
+| Processo encerrado deixava painel indisponível; bytecode poderia surgir na inferência | Permitir reabrir painel encerrado e iniciar worker com `-B` | Interface após treino e inferência com adaptador salvo em VM nova confirmadas |
 
 `SFTTrainer.train()` foi executado na GPU do Colab, e os artefatos foram
-conferidos após sua conclusão. Essa evidência vai além da montagem do Drive
-e da preparação do corpus; ainda não conclui a reabertura em uma VM nova.
+conferidos após sua conclusão. A reabertura e a inferência foram executadas
+em outra VM; a replicação por outro operador ainda precisa ser comprovada.
 
 O teste CPU executou operações reais de Transformers e PEFT e o construtor/
 preparo de dados do TRL. **Não executou `SFTTrainer.train()`**: o caminho de
@@ -98,7 +98,7 @@ Preserve tentativas parciais e diagnostique antes de criar outra execução.
 As seções abaixo registram a extração anterior e seus resultados remotos.
 Suas contagens de testes, versões antigas e pendência DEP-01 não descrevem
 a configuração atual: foram preservadas como histórico. O tratamento novo,
-o treino GPU concluído e as pendências de reabertura/replicação independente
+o treino GPU e a reabertura concluídos e a pendência de replicação independente
 estão documentados acima.
 
 ### Decisão da extração
@@ -173,9 +173,8 @@ instaladas em diretórios temporários, fora do projeto; nenhuma biblioteca GPU 
 | CI preparado | Python 3.11/3.12, token somente leitura, checkout sem credenciais persistidas, actions fixadas por SHA e limite de dez minutos. CI remoto aprovado em Python 3.11 e 3.12 (links abaixo) |
 
 Na extração inicial, o lock transitivo completo ainda não existia. A nova
-rota inclui um lock com hashes e já executou CUDA/treino na T4; a reinstalação
-e a reabertura em VM nova, além da replicação por outro operador/segunda conta,
-continuam pendentes conforme o registro atual acima.
+rota inclui um lock com hashes e já executou CUDA/treino e reabertura em VM nova
+na T4. A replicação por outro operador/segunda conta permanece pendente.
 Um pin de versão não prova ausência de vulnerabilidade. O aviso de geração sobre
 max_new_tokens/max_length não foi ocultado ou alterado sem teste da biblioteca GPU.
 

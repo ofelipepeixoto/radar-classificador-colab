@@ -2,9 +2,9 @@
 
 Você vai treinar um adaptador com mensagens fictícias e depois digitar novos textos em uma interface. Treino e inferência acontecem na GPU do Colab. Seu computador mostra a página no navegador.
 
-**Este fluxo ainda está em homologação.** O novo treino na T4 concluiu 63 passos em FP16, com 30/34 acertos e 100% de JSON válido no teste sintético; duas mensagens fictícias também foram testadas pela interface. A reinstalação e a reabertura do adaptador em uma VM nova ainda estão pendentes, assim como a revisão das PRs e a versão estável. Isso não valida atendimento real.
+**Este fluxo ainda está em homologação.** O novo treino na T4 concluiu 63 passos em FP16, com 30/34 acertos e 100% de JSON válido no teste sintético; duas mensagens fictícias foram testadas pela interface. Uma VM nova reinstalou as dependências e reabriu o adaptador salvo sem retreino. Revisão das PRs e versão estável permanecem pendentes. Isso não valida atendimento real.
 
-**A execução por outro operador em uma segunda conta independente ainda não foi comprovada.** A tentativa atual de reabertura passou nas verificações de Python, GPU e código/testes, mas parou na autenticação do Drive, aguardando uma confirmação manual na janela do Google.
+**A execução por outro operador em uma segunda conta independente ainda não foi comprovada.** A reabertura técnica exigiu confirmação manual na janela do Google antes de montar o Drive.
 
 ## 1. Abra e salve sua cópia
 
@@ -64,7 +64,7 @@ O notebook usa Transformers + PEFT + TRL para treinar LoRA em 16 bits, sem Unslo
 | ipywidgets | `8.1.8` |
 | setuptools | `83.0.0` |
 
-A instalação cria `/content/radar-classificador-env-hf`: um ambiente Python separado, **sem herdar os pacotes já instalados no Colab**. O arquivo `requirements-colab-lock.txt` fixa 94 distribuições com hashes para Python 3.12/Linux x86_64. O plano já vem resolvido: `REVISAR_PLANO` mostra suas versões e hashes sem baixar a distribuição CUDA. Instalação, `pip check`, CUDA e treino já passaram na T4 observada; a reinstalação e a reabertura em VM nova ainda precisam terminar. Outras sessões continuam exigindo todas as verificações.
+A instalação cria `/content/radar-classificador-env-hf`: um ambiente Python separado, **sem herdar os pacotes já instalados no Colab**. O arquivo `requirements-colab-lock.txt` fixa 94 distribuições com hashes para Python 3.12/Linux x86_64. O plano já vem resolvido: `REVISAR_PLANO` mostra suas versões e hashes sem baixar a distribuição CUDA. Instalação, `pip check`, CUDA e treino passaram na T4 observada; uma VM nova repetiu a instalação e reabriu o adaptador salvo. Outras sessões continuam exigindo todas as verificações.
 
 Use as células fornecidas para revisar, instalar e conferir o ambiente. Elas criam o ambiente sem pip próprio e usam o pip disponível no Colab para gerenciar **somente o Python isolado**. Isso contorna a ausência de `ensurepip` em algumas sessões, mantendo as mesmas 94 dependências fixadas.
 
