@@ -4,8 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 from ft05 import validate, split, evaluate, strict_json, prepare, normalize, load_frozen, compare
-from train import MODEL, run, check_config, load_pinned_model
+from train import MODEL, REVISION, run, check_config, load_pinned_model
 
 
 def rows():
@@ -71,24 +72,52 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError): check_config({})
 
     def test_model_loader_keeps_requested_repo_and_revision(self):
-        revision = 'a' * 40
-        class Loader:
+        runtime = {'device': 'cuda:0', 'dtype': 'bf16'}
+        tokenizer = SimpleNamespace(chat_template='template', pad_token_id=1, eos_token_id=1)
+
+        class Model:
+            config = SimpleNamespace(_name_or_path=MODEL)
+
+            def to(self, device):
+                self.device = device
+                return self
+
+            def eval(self):
+                pass
+
+        class ModelLoader:
             @staticmethod
-            def from_pretrained(**kwargs):
-                self.assertEqual(kwargs['model_name'], MODEL)
-                self.assertEqual(kwargs['revision'], revision)
-                self.assertIs(kwargs['use_exact_model_name'], True)
-                return SimpleNamespace(config=SimpleNamespace(_name_or_path=MODEL)), object()
-        _, _, loaded_name = load_pinned_model(Loader, revision)
+            def from_pretrained(name, **kwargs):
+                self.assertEqual(name, MODEL)
+                self.assertEqual(kwargs['revision'], REVISION)
+                self.assertIs(kwargs['trust_remote_code'], False)
+                self.assertIs(kwargs['use_safetensors'], True)
+                self.assertNotIn('quantization_config', kwargs)
+                return Model()
+
+        class TokenizerLoader:
+            @staticmethod
+            def from_pretrained(name, **kwargs):
+                self.assertEqual(name, MODEL)
+                self.assertEqual(kwargs['revision'], REVISION)
+                self.assertIs(kwargs['trust_remote_code'], False)
+                return tokenizer
+
+        with patch.dict('sys.modules', {'transformers': SimpleNamespace(
+                AutoModelForCausalLM=ModelLoader, AutoTokenizer=TokenizerLoader)}):
+            model, loaded_tokenizer, loaded_name = load_pinned_model(REVISION, runtime=runtime)
         self.assertEqual(loaded_name, MODEL)
+        self.assertEqual(model.device, 'cuda:0')
+        self.assertIs(loaded_tokenizer, tokenizer)
 
         class SubstitutingLoader:
             @staticmethod
-            def from_pretrained(**kwargs):
-                return SimpleNamespace(config=SimpleNamespace(
-                    _name_or_path='unsloth/Qwen2.5-1.5B-Instruct-unsloth-bnb-4bit')), object()
-        with self.assertRaisesRegex(ValueError, 'model_source_changed'):
-            load_pinned_model(SubstitutingLoader, revision)
+            def from_pretrained(*args, **kwargs):
+                return SimpleNamespace(config=SimpleNamespace(_name_or_path='third-party/model'))
+        with patch.dict('sys.modules', {'transformers': SimpleNamespace(
+                AutoModelForCausalLM=SubstitutingLoader, AutoTokenizer=TokenizerLoader)}):
+            with self.assertRaisesRegex(ValueError, 'model_source_changed'):
+                load_pinned_model(REVISION, runtime=runtime)
 
     def test_same_holdout_comparison_counts_improvements_and_regressions(self):
         data = rows()[:3]

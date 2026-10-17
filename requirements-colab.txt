@@ -1,9 +1,14 @@
-# Direct versions from the original Colab run, not a complete transitive lock.
-# Datasets advisory: see SECURITY.md. Only in-memory synthetic text is permitted.
-# Install through the explicit notebook cells; CUDA/Python compatibility must be checked.
-unsloth==2026.10.6
-torch==2.11.0+cu128
+# Direct versions of the Transformers + PEFT + TRL route; no Unsloth.
+# The notebook installs the complete hashed requirements-colab-lock.txt in an
+# isolated Python 3.12 Linux x86_64 venv, without system-site-packages.
+# The lock uses direct wheel URLs, --require-hashes and --no-index.
+# Do not pip-install this direct-version list into the notebook kernel.
+# CUDA/driver/GPU operation still requires Colab homologation. See SECURITY.md.
+torch==2.13.0+cu129
 transformers==5.13.1
 trl==1.15.0
-datasets==4.8.5
+datasets==5.0.1
 peft==0.19.1
+accelerate==1.15.0
+ipywidgets==8.1.8
+setuptools==83.0.0

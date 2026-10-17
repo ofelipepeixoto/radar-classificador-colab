@@ -4,14 +4,13 @@ import importlib.metadata
 import json
 import re
 import subprocess
-import time
 from pathlib import Path
 
 from ft05 import load_frozen, normalize, strict_json, target
-from train import MODEL, load_pinned_model
+from train import (MODEL, REVISION, TRAINING_BACKEND, MAX_CONTEXT, MAX_NEW_TOKENS,
+                   MIN_GPU_BYTES, load_pinned_model, generate_response)
 from adapter_integrity import sha256, verify_adapter
-
-REVISION = '5fee7c4ed634dc66c6e318c8ac2897b8b9154536'
+from dependencies import VERSIONS
 
 
 def validate_messages(messages):
@@ -41,14 +40,25 @@ def preflight(run_dir, corpus, frozen, *, versions=True):
     run_dir, corpus, frozen = Path(run_dir), Path(corpus), Path(frozen)
     run_file = run_dir / 'run.json'
     meta = strict_json(run_file.read_text(encoding='utf-8'))
+    if type(meta) is not dict or meta.get('training_backend') != TRAINING_BACKEND:
+        raise ValueError('incompatible_training_backend: preserve o adaptador antigo e use seu notebook original')
     if (type(meta) is not dict or meta.get('model') != MODEL
             or meta.get('loaded_model_name') != MODEL
             or meta.get('revision') != REVISION
             or meta.get('exact_model_name_required') is not True
             or meta.get('review_mode') != 'synthetic_machine_checked'
             or meta.get('human_reviewed') is not False
-            or meta.get('trained') is not True):
+            or meta.get('trained') is not True
+            or meta.get('precision') not in {'bf16', 'fp16'}
+            or meta.get('quantization') is not False
+            or meta.get('max_context') != MAX_CONTEXT
+            or meta.get('max_new_tokens') != MAX_NEW_TOKENS):
         raise ValueError('incompatible_training_run')
+    compute = meta.get('compute')
+    if (type(compute) is not dict or compute.get('precision') != meta['precision']
+            or type(compute.get('total_memory_bytes')) is not int
+            or compute['total_memory_bytes'] < MIN_GPU_BYTES):
+        raise ValueError('training_compute_provenance_missing')
     if sha256(corpus) != meta.get('dataset_sha256'):
         raise ValueError('training_corpus_changed')
     _, frozen_hash = load_frozen(corpus, frozen)
@@ -59,8 +69,7 @@ def preflight(run_dir, corpus, frozen, *, versions=True):
     verified_hashes = verify_adapter(
         adapter, meta.get('adapter_artifacts_sha256'), MODEL, REVISION)
     expected_versions = meta.get('versions')
-    if type(expected_versions) is not dict or set(expected_versions) != {
-            'unsloth', 'torch', 'transformers', 'trl', 'datasets', 'peft'}:
+    if type(expected_versions) is not dict or expected_versions != VERSIONS:
         raise ValueError('package_versions_missing')
     if versions:
         for package, expected in expected_versions.items():
@@ -79,46 +88,36 @@ def preflight(run_dir, corpus, frozen, *, versions=True):
             'adapter_artifacts_sha256': verified_hashes}
 
 
+def load_saved_adapter(checked):
+    """One shared loader for all inference paths, after strict CPU preflight."""
+    base, tokenizer, loaded_name = load_pinned_model(checked['meta']['revision'])
+    if hashlib.sha256(tokenizer.chat_template.encode()).hexdigest() != checked['meta']['chat_template_sha256']:
+        raise ValueError('chat_template_changed')
+    from peft import PeftModel
+    model = PeftModel.from_pretrained(base, str(checked['adapter']), is_trainable=False)
+    model.eval()
+    return model, tokenizer, loaded_name
+
+
 def run(messages, run_dir, output_dir, *, corpus, frozen):
     validate_messages(messages)
     output_dir = Path(output_dir)
     if output_dir.exists():
         raise ValueError('output_already_exists')
     checked = preflight(run_dir, corpus, frozen)
-    # Unsloth must precede Torch/Transformers in this Colab runtime.
-    from unsloth import FastLanguageModel
-    import torch
-    from peft import PeftModel
-    if not torch.cuda.is_available():
-        raise ValueError('cuda_required')
     meta = checked['meta']
-    base, tokenizer, loaded_name = load_pinned_model(FastLanguageModel, REVISION)
-    if hashlib.sha256(tokenizer.chat_template.encode()).hexdigest() != meta['chat_template_sha256']:
-        raise ValueError('chat_template_changed')
-    model = PeftModel.from_pretrained(base, str(checked['adapter']), is_trainable=False)
-    FastLanguageModel.for_inference(model)
-    model.eval()
+    model, tokenizer, loaded_name = load_saved_adapter(checked)
     rows = []
-    with torch.inference_mode():
-        for row in messages:
-            prompt = tokenizer.apply_chat_template(
-                [{'role': 'user', 'content': row['text']}], tokenize=False,
-                add_generation_prompt=True)
-            inputs = tokenizer(prompt, return_tensors='pt', add_special_tokens=False).to(model.device)
-            torch.cuda.synchronize()
-            started = time.perf_counter()
-            generated = model.generate(**inputs, max_new_tokens=96, do_sample=False)
-            torch.cuda.synchronize()
-            elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
-            output_text = tokenizer.decode(
-                generated[0][inputs['input_ids'].shape[-1]:], skip_special_tokens=True)
-            try:
-                parsed, error = target(output_text), None
-            except (ValueError, TypeError) as exc:
-                parsed, error = None, str(exc)
-            rows.append({'id': row['id'], 'text': row['text'],
-                         'predicted_text': output_text, 'parsed': parsed,
-                         'error': error, 'latency_ms': elapsed_ms})
+    for row in messages:
+        output_text, elapsed_ms = generate_response(
+            model, tokenizer, [{'role': 'user', 'content': row['text']}])
+        try:
+            parsed, error = target(output_text), None
+        except (ValueError, TypeError) as exc:
+            parsed, error = None, str(exc)
+        rows.append({'id': row['id'], 'text': row['text'],
+                     'predicted_text': output_text, 'parsed': parsed,
+                     'error': error, 'latency_ms': elapsed_ms})
     try:
         revision = subprocess.check_output(
             ['git', '-C', str(Path(__file__).resolve().parents[1]), 'rev-parse', 'HEAD'],
@@ -127,6 +126,7 @@ def run(messages, run_dir, output_dir, *, corpus, frozen):
         revision = None
     manifest = {'scope': 'personal_synthetic_smoke_no_gold_labels',
                 'model': loaded_name, 'model_revision': REVISION,
+                'training_backend': TRAINING_BACKEND,
                 'code_revision': revision,
                 'run_manifest_sha256': sha256(checked['run_file']),
                 'adapter_config_sha256': sha256(checked['config']),

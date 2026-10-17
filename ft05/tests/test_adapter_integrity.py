@@ -8,7 +8,8 @@ from adapter_integrity import adapter_hashes, verify_adapter
 from auto_pilot import write_auto_dataset
 from ft05 import prepare
 from personal_smoke import REVISION, preflight, sha256
-from train import MODEL, PACKAGES
+from train import MODEL, TRAINING_BACKEND, MIN_GPU_BYTES, MAX_CONTEXT, MAX_NEW_TOKENS
+from dependencies import VERSIONS
 
 
 def fixture(root):
@@ -23,9 +24,12 @@ def fixture(root):
     meta = {'model': MODEL, 'loaded_model_name': MODEL, 'revision': REVISION,
             'exact_model_name_required': True, 'review_mode': 'synthetic_machine_checked',
             'human_reviewed': False, 'trained': True,
+            'training_backend': TRAINING_BACKEND, 'precision': 'bf16', 'quantization': False,
+            'compute': {'precision': 'bf16', 'total_memory_bytes': MIN_GPU_BYTES},
+            'max_context': MAX_CONTEXT, 'max_new_tokens': MAX_NEW_TOKENS,
             'dataset_sha256': sha256(corpus),
             'frozen_manifest_sha256': sha256(frozen / 'manifest.json'),
-            'versions': {name: 'test' for name in PACKAGES},
+            'versions': dict(VERSIONS),
             'adapter_artifacts_sha256': adapter_hashes(adapter, MODEL, REVISION)}
     (run_dir / 'run.json').write_text(json.dumps(meta))
     return corpus, frozen, run_dir, meta
@@ -72,9 +76,26 @@ class AdapterIntegrityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             corpus, frozen, run_dir, _ = fixture(Path(tmp))
             with patch('personal_smoke.importlib.metadata.version',
-                       side_effect=importlib.metadata.PackageNotFoundError('unsloth')):
-                with self.assertRaisesRegex(ValueError, 'package_missing_unsloth: instale'):
+                       side_effect=importlib.metadata.PackageNotFoundError('torch')):
+                with self.assertRaisesRegex(ValueError, 'package_missing_torch: instale'):
                     preflight(run_dir, corpus, frozen)
+
+    def test_old_backend_is_rejected_before_packages_or_gpu(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            corpus, frozen, run_dir, meta = fixture(Path(tmp))
+            meta.pop('training_backend')
+            (run_dir / 'run.json').write_text(json.dumps(meta))
+            with self.assertRaisesRegex(ValueError, 'incompatible_training_backend'):
+                preflight(run_dir, corpus, frozen, versions=False)
+
+    def test_pickle_and_sharded_adapter_are_rejected(self):
+        for name in ('adapter_model.bin', 'adapter_model.safetensors.index.json',
+                     'adapter_model-00001-of-00002.safetensors'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                _, _, run_dir, _ = fixture(Path(tmp))
+                (run_dir / 'adapter' / name).write_text('{}')
+                with self.assertRaisesRegex(ValueError, 'adapter_weight_format_not_supported'):
+                    adapter_hashes(run_dir / 'adapter', MODEL, REVISION)
 
     def test_secondary_inference_paths_share_preflight(self):
         from evaluate_saved_adapter import run as stress_run

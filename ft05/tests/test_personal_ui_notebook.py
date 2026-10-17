@@ -19,11 +19,11 @@ class PersonalUiNotebookTest(unittest.TestCase):
             compile(source, '<personal-colab>', 'exec')
         ui, = [source for source in cells if 'ABRIR_INTERFACE = False' in source]
         self.assertIn('if ABRIR_INTERFACE:', ui)
-        self.assertIn('launch(RUN_DIR, CORPUS, FROZEN)', ui)
+        self.assertIn('launch(ENV_PYTHON, RUN_DIR, CORPUS, FROZEN)', ui)
         module = (Path(__file__).resolve().parents[1] / 'personal_ui.py').read_text()
         compile(module, '<personal-ui>', 'exec')
         self.assertIn('button.on_click(classify)', module)
-        self.assertIn('torch.inference_mode()', module)
+        self.assertIn('generate_response(', module)
         self.assertIn('preflight(run_dir, corpus, frozen, versions=True)', module)
         self.assertNotIn('share=True', ui)
         self.assertNotIn('save_pretrained', ui)

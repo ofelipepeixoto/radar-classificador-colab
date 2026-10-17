@@ -2,6 +2,10 @@
 
 ## O que os resultados permitem concluir
 
+Os resultados desta seção pertencem ao piloto original com Unsloth. A rota
+atual Transformers + PEFT + TRL mantém corpus e base, mas exige um novo treino
+e avaliação próprios. A pontuação histórica não foi reproduzida no backend novo.
+
 O teste sintético congelado do piloto acertou 32/34. Seus dois erros conhecidos
 eram `media` → `alta` em entrega e cancelamento. No diagnóstico posterior,
 feito **depois** de ver esses erros, houve 20/24 acertos, com 4/8 casos de
@@ -59,30 +63,33 @@ candidatos continua `false`. Nenhuma alteração de treino é feita neste fluxo.
    de inferência correspondente; informa acerto, JSON válido, matrizes de
    categoria/urgência, `false_high` e `missed_high`. Nenhum passo treina.
 
-Exemplo de execução no Colab Pro, com o Drive já montado, dependências
-validadas e a branch desta PR clonada; caminhos são exemplos privados:
+Exemplo avançado no Colab, com o Drive já montado, o ambiente isolado
+validado e o repositório como diretório atual. Os caminhos são exemplos
+privados. `predict` aceita apenas um adaptador concluído pelo backend atual,
+com procedência e hashes registrados; não aceita o antigo `run-002-g4`.
+Este protocolo fica separado do exercício sintético para iniciantes.
 
 ```sh
-python3 ft05/independent_eval.py prepare \
+/content/radar-classificador-env-hf/bin/python ft05/independent_eval.py prepare \
   /content/drive/MyDrive/FT05/private/source-anonymized.csv \
   /content/drive/MyDrive/FT05/private/eval-001 \
   --n 60 --seed 3407 \
   --frame 'Pedidos de suporte do canal X, 01 a 15/10/2026 UTC, todos os elegíveis'
 
 # Após duas revisões reais e adjudicação dos desacordos:
-python3 ft05/independent_eval.py seal \
+/content/radar-classificador-env-hf/bin/python ft05/independent_eval.py seal \
   /content/drive/MyDrive/FT05/private/eval-001 \
   /content/drive/MyDrive/FT05/private/eval-001-sealed
 
-python3 ft05/independent_eval.py predict \
+/content/radar-classificador-env-hf/bin/python ft05/independent_eval.py predict \
   /content/drive/MyDrive/FT05/private/eval-001 \
   /content/drive/MyDrive/FT05/private/eval-001-sealed \
-  /content/drive/MyDrive/FT05/piloto-auto-001/run-002-g4 \
+  /content/drive/MyDrive/RadarClassificador/meu-piloto-001/run-001 \
   /content/drive/MyDrive/FT05/private/eval-001-predictions \
-  --corpus /content/drive/MyDrive/FT05/piloto-auto-001/synthetic-machine-checked.jsonl \
-  --frozen /content/drive/MyDrive/FT05/piloto-auto-001/frozen
+  --corpus /content/drive/MyDrive/RadarClassificador/meu-piloto-001/synthetic-machine-checked.jsonl \
+  --frozen /content/drive/MyDrive/RadarClassificador/meu-piloto-001/frozen
 
-python3 ft05/independent_eval.py score \
+/content/radar-classificador-env-hf/bin/python ft05/independent_eval.py score \
   /content/drive/MyDrive/FT05/private/eval-001 \
   /content/drive/MyDrive/FT05/private/eval-001-sealed \
   /content/drive/MyDrive/FT05/private/eval-001-predictions/predictions.json \

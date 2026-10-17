@@ -1,6 +1,79 @@
-# Auditoria da extração FT05 — 17/10/2026
+# Auditoria FT05 — extração e nova rota de dependências
 
-## Decisão
+## Atualização: Transformers + PEFT + TRL
+
+A branch `fix/safe-training-dependencies` prepara o tratamento da
+[issue #3](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/3)
+em uma PR sobre a PR #1 de extração. A mudança remove Unsloth da rota de
+treino e inferência, atualiza Datasets para `5.0.1` e usa LoRA em 16 bits,
+sem quantização de 4/8 bits. A base Qwen na revisão fixa e o corpus sintético
+original não foram alterados. Os resultados históricos de 32/34 e 20/24 não
+são resultados do novo backend; seu desempenho ainda precisa ser medido.
+
+### Instalação e fronteiras
+
+- Ambiente dedicado `/content/radar-classificador-env-hf`, sem
+  `system-site-packages`. Os pacotes do kernel Colab não são substituídos.
+- `requirements-colab-lock.txt`: 94 distribuições com URLs diretas e hashes,
+  específicas para Python 3.12/Linux x86_64. O instalador exige
+  `--require-hashes` e `--no-index`; `ft05/environment-lock.json` registra a
+  composição esperada.
+- O plano de instalação já foi resolvido na preparação. Sua revisão mostra
+  versões e hashes sem baixar a distribuição CUDA. Instalação, `pip check`,
+  conferência das versões e verificação CUDA precedem `AMBIENTE_OK`.
+- Treino e inferência são executados pelo Python do ambiente separado. A
+  interface de widgets permanece no notebook, sem servidor ou túnel público.
+- Uma GPU de classe 16 GB ou maior é exigida pelo limite de
+  16.000.000.000 bytes. Uma T4 pode aparecer com aproximadamente 15 GiB e
+  passar nesse limite; isso não homologa memória de pico, driver ou treino.
+  A distribuição Torch usa CUDA 12.9; compatibilidade real ainda precisa ser
+  verificada no Colab.
+
+O ambiente Python separado evita herdar conflitos de pacotes; não é um
+sandbox de segurança e mantém o acesso da sessão ao Drive montado.
+
+### Dependências e risco residual
+
+| Item | Tratamento e limite |
+| --- | --- |
+| Datasets `4.8.5`, DEP-01 histórico | Substituído por `5.0.1`, a versão corrigida informada no advisory. Remover Unsloth elimina a restrição que impedia essa combinação. O fluxo continua limitado a `Dataset.from_dict` com texto sintético validado |
+| Accelerate `1.15.0` | Risco residual para `weight_map` de checkpoints fragmentados. O feed GHSA lista até `1.14.0` e nenhuma versão corrigida; a inspeção do wheel `1.15.0` ainda encontrou o caminho de código relevante. Ausência de alerta OSV nessa versão não prova correção |
+| Carregamento de pesos | Somente base conhecida na revisão fixa e adaptador local selado com dois arquivos de nomes fixos. Índices externos de fragmentos, pickle e dispatch de checkpoints externos são recusados ou excluídos da rota |
+
+Esses controles limitam a entrada do exercício; **a biblioteca Accelerate não
+é declarada corrigida**. Não houve conclusão de ausência de vulnerabilidades.
+Consulte [SECURITY.md](../SECURITY.md#risco-residual-em-accelerate) e o
+[advisory Accelerate](https://github.com/advisories/GHSA-4j2p-28q2-5m79).
+
+### Evidências desta atualização
+
+| Verificação | Evidência disponível |
+| --- | --- |
+| Resolução do ambiente | 94 distribuições resolvidas e hashes registrados para Python 3.12/Linux x86_64, sem GPU |
+| Testes offline atuais | 89 testes: 88 aprovados e 1 integração HF opcional omitida; executada separadamente com sucesso abaixo. Dois notebooks validados com nbformat |
+| Auditoria transitiva | [Consulta OSV e limites](dependency-audit-2026-10-17.json): 94 distribuições sem correspondência no feed; Torch normalizado para 2.13.0. Não analisa binários CUDA; inspeção manual encontrou o residual Accelerate |
+| Análise estática | Bandit 1.9.4: 20 observações baixas, nenhuma média/alta. Chamadas subprocesso usam listas, sem shell; caminhos de script são locais conferidos. Uso de random é para separar exemplos, sem função criptográfica |
+| Integração real Hugging Face em CPU | 1 teste aprovado em 3,649 s: Qwen minúsculo aleatório e local, backward + AdamW alteraram parâmetros LoRA; `SFTTrainer` + Datasets `5.0.1` prepararam `input_ids`; safetensors gravado, selado e reaberto com logits iguais; geração real sem conflito `max_length`/`max_new_tokens`. `socket.connect` bloqueado e não chamado |
+| Homologação Colab | Pendente na [issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2): instalar em sessão limpa, treinar com GPU, salvar, encerrar a sessão e reabrir o adaptador em outra sessão |
+| Qualidade do novo adaptador | Ainda não medida. Não reutilizar a pontuação histórica como evidência desta rota |
+
+O teste CPU executou operações reais de Transformers e PEFT e o construtor/
+preparo de dados do TRL. **Não executou `SFTTrainer.train()`**: o caminho de
+treino dessa versão de TRL depende de Triton/CUDA. Portanto ele não substitui
+a homologação de treinamento na GPU nem valida a base Qwen 1,5B.
+
+Reabrir um adaptador concluído significa fazer inferência novamente. Retomar
+um treinamento interrompido a partir de checkpoint não está implementado.
+Preserve tentativas parciais e diagnostique antes de criar outra execução.
+
+## Extração inicial — registro histórico de 17/10/2026
+
+As seções abaixo registram a extração anterior e seus resultados remotos.
+Suas contagens de testes, versões antigas e pendência DEP-01 não descrevem
+a configuração atual: foram preservadas como histórico. O tratamento novo
+está documentado acima e ainda precisa da homologação GPU.
+
+### Decisão da extração
 
 Extração preparada para revisão e homologação. O código do roteador, n8n e
 Laya não foi copiado. Não houve alteração no repositório de origem nesta extração.
@@ -34,7 +107,7 @@ e a pendência de dependências abaixo impedem anunciar o tutorial como pronto.
 | SEC-06 | Baixa: configuração de destinos exigia limites explícitos | Nomes relativos validados, sem .., absolutos ou escape por symlink; execução não sobrescreve pasta/config existente | Corrigido nos helpers e notebooks |
 | DEP-01 | Média, confirmada no feed e fontes abaixo: datasets 4.8.5 afetado por GHSA-379c-qx7v-6h59 / CVE-2026-66007 | Caminho vulnerável não exposto: só Dataset.from_dict com texto sintético validado, sem builders de pasta/load_dataset/save_to_disk/push_to_hub. Testes impedem metadado file_name e adição dessas APIs | Mitigado no escopo; biblioteca não corrigida |
 
-### Pendência DEP-01
+### DEP-01 na extração inicial
 
 O aviso descreve leitura fora de diretório por metadado `file_name` em builders
 de pastas. O feed informa correção em Datasets `5.0.1`. A metadata oficial no
@@ -43,8 +116,9 @@ PyPI de Unsloth `2026.10.6` (versão mais recente consultada) exige
 Forçar `5.0.1` contradiz essa exigência. A tentativa de atualização foi descartada
 da configuração; não foi instalado pacote GPU ou alterado o ambiente do autor.
 Não há exploração observada neste projeto. Não expandir o fluxo a datasets externos.
-Antes de versão estável, resolver e homologar uma combinação corrigida, sem
-ignorar o resolver ou o pip check. O novo repositório não anuncia zero vulnerabilidades.
+Naquela etapa, a combinação corrigida ainda não havia sido preparada. A nova
+rota descrita acima trata essa restrição sem forçar a instalação de pacotes
+incompatíveis. O repositório não anuncia zero vulnerabilidades.
 
 Fontes consultadas:
 
@@ -70,15 +144,17 @@ instaladas em diretórios temporários, fora do projeto; nenhuma biblioteca GPU 
 | Conteúdo público | `scripts/check_publication.py`: tripwire de segredos comuns, ausência de pesos/arquivos privados e outputs de notebooks; não é garantia de ausência de todo segredo |
 | CI preparado | Python 3.11/3.12, token somente leitura, checkout sem credenciais persistidas, actions fixadas por SHA e limite de dez minutos. CI remoto aprovado em Python 3.11 e 3.12 (links abaixo) |
 
-O lock transitivo real deve ser gerado e auditado na sessão Colab homologada.
+Na extração inicial, o lock transitivo completo ainda não existia. A nova
+rota agora inclui um lock com hashes, cuja execução CUDA precisa de homologação.
 Um pin de versão não prova ausência de vulnerabilidade. O aviso de geração sobre
 max_new_tokens/max_length não foi ocultado ou alterado sem teste da biblioteca GPU.
 
 ## Revisão e próximo passo
 
 Revisar a PR de extração. A `main` foi protegida: PR e checks `checks (3.11)`/`checks (3.12)` obrigatórios, base atualizada, conversas resolvidas, sem force push ou exclusão, incluindo administradores. A regra não exige uma aprovação GitHub de terceiro (contagem 0, repositório pessoal); revisão humana continua uma etapa operacional antes de integrar.
-Resolver DEP-01 e executar o [roteiro de homologação](PLANO.md) em outra conta
-autorizada/pasta nova, incluindo retomada em runtime novo. Só então fixar tag e
+O tratamento proposto para DEP-01 está na nova rota acima. Execute o
+[roteiro de homologação](PLANO.md) em outra conta autorizada/pasta nova,
+incluindo reabertura do adaptador em runtime novo. Só então fixar tag e
 links estáveis para divulgar o tutorial. O `run-002-g4` e o Drive original ficam intactos.
 
 ## Evidências remotas conferidas

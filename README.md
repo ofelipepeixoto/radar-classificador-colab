@@ -4,20 +4,21 @@ Crie e teste **seu próprio adaptador de IA** para classificar mensagens, usando
 
 **Estado: projeto educacional experimental.** O fluxo separado neste repositório ainda precisa concluir uma execução inteira em uma segunda conta Google e pasta nova. Não está homologado para atendimento real.
 
-Existe também uma [pendência de dependência](SECURITY.md#aviso-de-dependência-conhecido):
-a biblioteca Datasets fixada tem um aviso em carregadores de pastas, que este
-exercício não usa. Uma combinação corrigida e compatível precisa ser homologada
-antes de anunciar a versão estável.
+A nova rota usa **Transformers + PEFT + TRL**, com LoRA em 16 bits e ambiente
+isolado. Ela remove a dependência de Unsloth e permite Datasets `5.0.1`.
+Há um [risco residual em Accelerate](SECURITY.md#risco-residual-em-accelerate),
+limitado pelo formato e pela origem dos pesos aceitos. A biblioteca não é
+declarada corrigida. Instalação e execução na GPU ainda precisam de homologação.
 
 ## Comece por aqui
 
-**Prévia para homologação:** [abrir Comece aqui no Colab](https://colab.research.google.com/github/ofelipepeixoto/radar-classificador-colab/blob/feat/community-initial/COMECE-AQUI.ipynb) · [testar adaptador salvo](https://colab.research.google.com/github/ofelipepeixoto/radar-classificador-colab/blob/feat/community-initial/TESTAR-ADAPTADOR.ipynb).
+**Prévia para homologação:** [abrir Comece aqui no Colab](https://colab.research.google.com/github/ofelipepeixoto/radar-classificador-colab/blob/fix/safe-training-dependencies/COMECE-AQUI.ipynb) · [testar adaptador salvo](https://colab.research.google.com/github/ofelipepeixoto/radar-classificador-colab/blob/fix/safe-training-dependencies/TESTAR-ADAPTADOR.ipynb).
 Esses links apontam à branch de rascunho com conteúdo verificado pelo notebook, ainda sem tag estável.
 
 1. Leia o [passo a passo](docs/COMECE-AQUI.md).
 2. Abra [COMECE-AQUI.ipynb](COMECE-AQUI.ipynb) no Colab e salve uma cópia na sua conta.
 3. Siga uma célula por vez para preparar o exercício, instalar as dependências e treinar o seu adaptador.
-4. Use a interface de texto e botão para testar mensagens fictícias. Em outra sessão, retome com [TESTAR-ADAPTADOR.ipynb](TESTAR-ADAPTADOR.ipynb).
+4. Use a interface de texto e botão para testar mensagens fictícias. Em outra sessão, reabra o adaptador com [TESTAR-ADAPTADOR.ipynb](TESTAR-ADAPTADOR.ipynb).
 
 Cada pessoa usa uma pasta nova no próprio Drive. O repositório não distribui o adaptador do autor, não requer sua GPU local e não abre um servidor público para a interface.
 
@@ -39,16 +40,19 @@ Ela recebe uma mensagem e devolve dois campos:
 ## O que você precisa
 
 - Conta Google, acesso ao Colab e espaço no Drive.
-- Runtime com GPU compatível. Disponibilidade, tempo e consumo de unidades dependem da sua conta e sessão; o projeto não garante execução gratuita.
+- Python 3.12 em runtime Colab Linux x86_64, com GPU de classe 16 GB ou maior e driver compatível com a distribuição CUDA 12.9 usada pela receita. O notebook verifica a memória em bytes; GPUs de 16 GB podem aparecer com aproximadamente 15 GiB. Isso não garante que a receita caiba ou funcione em toda T4 ou outra GPU.
+- Tempo e unidades de computação na sua conta. Disponibilidade e consumo variam; o projeto não garante execução gratuita.
 - Mensagens fictícias para testar a interface.
 
-O modelo base é `Qwen/Qwen2.5-1.5B-Instruct`; o treinamento cria um adaptador LoRA. As versões de referência vêm de uma execução anterior em Python 3.12 e GPU NVIDIA RTX PRO 6000 Blackwell. Isso não comprova compatibilidade com toda GPU ou runtime do Colab.
+O modelo base continua `Qwen/Qwen2.5-1.5B-Instruct`, na revisão fixada. O treinamento cria um adaptador LoRA sem quantização de 4/8 bits. A instalação usa um ambiente Python separado em `/content/radar-classificador-env-hf`, sem herdar os pacotes do kernel Colab. Treino e inferência rodam nesse ambiente; a interface continua no navegador.
+
+O lock contém 94 distribuições com hashes para Python 3.12/Linux x86_64. A resolução foi verificada sem GPU. Um teste real em CPU também confirmou atualização LoRA, gravação, reabertura e geração com um modelo minúsculo local, além da preparação de dados pelo TRL. Isso não homologa o treino TRL em GPU, CUDA, memória ou qualidade do adaptador 1,5B. Reabrir um adaptador salvo é suportado; continuar um treinamento a partir de checkpoint não está implementado.
 
 ## Dados e limites
 
 O corpus contém **208 exemplos sintéticos**: 162 de treino, 12 de validação e 34 de teste. Eles passaram por checagens automáticas e continuam com **`reviewed: false`**. O tutorial não pede que você preencha manualmente 216 linhas para executar esse piloto.
 
-O piloto original obteve 32/34 acertos no teste sintético congelado e 20/24 em um ensaio exploratório posterior. São conjuntos pequenos, sintéticos e diferentes entre si. Também foram observadas urgências excessivas em pedidos sem prazo iminente. Esses números não representam desempenho com clientes reais nem garantem o mesmo resultado em outra execução.
+O piloto original, com outro backend, obteve 32/34 acertos no teste sintético congelado e 20/24 em um ensaio exploratório posterior. São conjuntos pequenos, sintéticos e diferentes entre si. Também foram observadas urgências excessivas em pedidos sem prazo iminente. **O desempenho da nova rota ainda será medido**; esses números não representam desempenho com clientes reais nem garantem o mesmo resultado.
 
 O teste congelado serve para avaliação. Não ajuste os rótulos ou retreine com seus erros para aumentar a pontuação. Para outro domínio ou uso real, será necessário definir um protocolo novo, com dados autorizados e rótulos revisados de forma independente.
 
@@ -67,7 +71,7 @@ O teste congelado serve para avaliação. Não ajuste os rótulos ou retreine co
 
 ## Para contribuir com código
 
-Os testes offline usam apenas a biblioteca padrão do Python; não treinam nem instalam bibliotecas de GPU:
+Os testes offline padrão usam a biblioteca padrão do Python; não treinam nem instalam bibliotecas de GPU. O teste opcional de integração real Hugging Face fica desativado por padrão:
 
 ```bash
 PYTHONPATH=ft05 python -m unittest discover -s ft05/tests -v

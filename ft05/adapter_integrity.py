@@ -23,6 +23,11 @@ def sha256(path):
 def adapter_hashes(adapter, model, revision):
     """Validate local files and base provenance before hashing saved artifacts."""
     adapter = Path(adapter)
+    # This route loads one local safetensors file, never pickle or shard indexes.
+    if any(path.name.endswith(('.index.json', '.bin', '.pt', '.pth'))
+           or (path.suffix == '.safetensors' and path.name != 'adapter_model.safetensors')
+           for path in adapter.iterdir()):
+        raise ValueError('adapter_weight_format_not_supported: use apenas o safetensors único deste treino')
     for name in ADAPTER_FILES:
         path = adapter / name
         if path.is_symlink() or not path.is_file() or not path.stat().st_size:
@@ -31,7 +36,8 @@ def adapter_hashes(adapter, model, revision):
     if (type(config) is not dict
             or config.get('base_model_name_or_path') != model
             or config.get('peft_type') != 'LORA'
-            or config.get('revision') not in (None, revision)):
+            or config.get('revision') not in (None, revision)
+            or config.get('auto_mapping') is not None):
         raise ValueError('adapter_base_mismatch: a configuração não corresponde à base fixada')
     return {name: sha256(adapter / name) for name in ADAPTER_FILES}
 

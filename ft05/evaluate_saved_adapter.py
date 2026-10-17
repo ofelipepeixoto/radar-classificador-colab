@@ -8,8 +8,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from ft05 import CATEGORIES, URGENCIES, evaluate, load, load_frozen, normalize, target
-from train import MODEL, infer, load_pinned_model
-from personal_smoke import preflight
+from train import MODEL, TRAINING_BACKEND, infer
+from personal_smoke import preflight, load_saved_adapter
 
 STRESS = Path(__file__).with_name('posthoc-stress-v1.jsonl')
 
@@ -81,16 +81,7 @@ def run(run_dir, output_dir, corpus, frozen):
     validate_stress(stress, original)
     adapter = checked['adapter']
     config_file, weights_file = checked['config'], checked['weights']
-    # Unsloth must be imported before Torch/Transformers in this runtime.
-    from unsloth import FastLanguageModel
-    import torch
-    from peft import PeftModel
-    if not torch.cuda.is_available():
-        raise ValueError('cuda_required')
-    base, tokenizer, loaded_name = load_pinned_model(FastLanguageModel, metadata['revision'])
-    if hashlib.sha256(tokenizer.chat_template.encode()).hexdigest() != metadata['chat_template_sha256']:
-        raise ValueError('chat_template_changed')
-    model = PeftModel.from_pretrained(base, str(adapter), is_trainable=False)
+    model, tokenizer, loaded_name = load_saved_adapter(checked)
     _, predictions = infer(model, tokenizer, stress)
     report = summarize(stress, predictions)
     try:
@@ -102,6 +93,7 @@ def run(run_dir, output_dir, corpus, frozen):
     provenance = {'source_run_manifest_sha256': sha256(source_manifest),
                   'source_run_name': run_dir.name, 'model': MODEL,
                   'revision_requested': metadata['revision'], 'loaded_model_name': loaded_name,
+                  'training_backend': TRAINING_BACKEND,
                   'adapter_config_sha256': sha256(config_file),
                   'adapter_weights_sha256': sha256(weights_file),
                   'corpus_sha256': sha256(corpus), 'frozen_manifest_sha256': frozen_hash,

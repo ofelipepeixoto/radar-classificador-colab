@@ -86,9 +86,9 @@ class CommunityColabTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             env = {'CONFERIR_DEPENDENCIAS': True, 'ROOT': Path(directory), 'sys': sys,
                    'subprocess': __import__('subprocess'), 'MONTAR_DRIVE': True,
-                   'PREPARAR_CORPUS': True}
-            with patch('community.require_packages'), patch('community.save_environment'), patch('subprocess.run') as run:
-                run.return_value.returncode, run.return_value.stdout = 1, 'dependency conflict'
+                   'PREPARAR_CORPUS': True, 'PLANO_REVISADO': True,
+                   'ENV_DIR': Path(directory)/'env', 'REPO_DIR': ROOT}
+            with patch('colab_environment.validate_environment', side_effect=ValueError('Conflitos no ambiente isolado')):
                 with self.assertRaisesRegex(ValueError, 'Conflitos'): exec(install, env)
                 self.assertFalse(env['AMBIENTE_OK'])
                 with self.assertRaisesRegex(ValueError, 'Conclua'): exec(train, env)
@@ -101,8 +101,7 @@ class CommunityColabTests(unittest.TestCase):
             run_dir = Path(directory); (run_dir / 'run.json').write_text('{}')
             env = {'MONTAR_DRIVE': True, 'AMBIENTE_OK': True, 'RUN_DIR': run_dir,
                    'hashlib': hashlib, 'panel': object(), 'panel_identity': ('old-run', 'old-hash')}
-            with patch('community.require_packages'):
-                with self.assertRaisesRegex(ValueError, 'Outra execução'): exec(code, env)
+            with self.assertRaisesRegex(ValueError, 'Outra execução'): exec(code, env)
 
     def test_corpus_preparation_retries_validate_without_changing_split(self):
         with tempfile.TemporaryDirectory() as directory:
