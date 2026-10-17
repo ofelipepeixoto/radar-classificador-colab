@@ -68,7 +68,7 @@ instaladas em diretórios temporários, fora do projeto; nenhuma biblioteca GPU 
 | Bandit 1.9.4 | 1.711 linhas de produção/scripts analisadas no primeiro passe, 0 avisos médios/altos e 10 baixos. Triagem: subprocess sem shell com argumentos locais/constantes e random.Random usado apenas em amostragem reprodutível |
 | pip-audit 2.10.1 | Consulta sem resolução: cinco dependências diretas auditáveis, um aviso em Datasets. Torch 2.11.0+cu128 não encontrado no feed PyPI e não auditado. Não cobre transitivas nem binários CUDA |
 | Conteúdo público | `scripts/check_publication.py`: tripwire de segredos comuns, ausência de pesos/arquivos privados e outputs de notebooks; não é garantia de ausência de todo segredo |
-| CI preparado | Python 3.11/3.12, token somente leitura, checkout sem credenciais persistidas, actions fixadas por SHA e limite de dez minutos. Resultado remoto registrado após publicação |
+| CI preparado | Python 3.11/3.12, token somente leitura, checkout sem credenciais persistidas, actions fixadas por SHA e limite de dez minutos. CI remoto aprovado em Python 3.11 e 3.12 (links abaixo) |
 
 O lock transitivo real deve ser gerado e auditado na sessão Colab homologada.
 Um pin de versão não prova ausência de vulnerabilidade. O aviso de geração sobre
@@ -76,7 +76,17 @@ max_new_tokens/max_length não foi ocultado ou alterado sem teste da biblioteca 
 
 ## Revisão e próximo passo
 
-Revisar a PR de extração. Conferir proteções da branch antes do primeiro merge.
+Revisar a PR de extração. A `main` foi protegida: PR e checks `checks (3.11)`/`checks (3.12)` obrigatórios, base atualizada, conversas resolvidas, sem force push ou exclusão, incluindo administradores. A regra não exige uma aprovação GitHub de terceiro (contagem 0, repositório pessoal); revisão humana continua uma etapa operacional antes de integrar.
 Resolver DEP-01 e executar o [roteiro de homologação](PLANO.md) em outra conta
 autorizada/pasta nova, incluindo retomada em runtime novo. Só então fixar tag e
 links estáveis para divulgar o tutorial. O `run-002-g4` e o Drive original ficam intactos.
+
+## Evidências remotas conferidas
+
+- [PR #1 em rascunho](https://github.com/ofelipepeixoto/radar-classificador-colab/pull/1), sem merge ou release.
+- Código publicado em `d5f473e76d4042f2282817e24ee0845715b80d66`; sincronização da página inicial em `9bbea77968941f4318051f55935e0af56fe3adcf`, sem alteração da árvore de código.
+- [CI push aprovado](https://github.com/ofelipepeixoto/radar-classificador-colab/actions/runs/39061633205) e [CI PR aprovado](https://github.com/ofelipepeixoto/radar-classificador-colab/actions/runs/39061639051), matriz Python 3.11/3.12.
+- Clone independente do GitHub: a própria célula 2 do notebook validou o manifesto e executou os 51 testes com sucesso. Publication checks passaram em 58 arquivos de texto; nenhuma biblioteca GPU foi instalada.
+- Metadata do repositório confirmou visibilidade pública, scanner de segredos e proteção de push de segredos ativos. Proteção de main foi relida após configurar. Não foi feito teste destrutivo de force push ou publicação de segredo real.
+- As duas refs da origem foram relidas e continuavam nos mesmos SHAs registrados, sem alteração pela extração. O Drive não foi acessado.
+- Pendências rastreadas: [dependências corrigidas, issue #3](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/3) e [homologação Colab, issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2).
