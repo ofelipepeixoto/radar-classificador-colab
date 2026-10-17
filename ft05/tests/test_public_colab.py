@@ -5,8 +5,9 @@ import shutil
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from community import paths, prepare_project
 
@@ -86,9 +87,9 @@ class CommunityColabTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             env = {'CONFERIR_DEPENDENCIAS': True, 'ROOT': Path(directory), 'sys': sys,
                    'subprocess': __import__('subprocess'), 'MONTAR_DRIVE': True,
-                   'PREPARAR_CORPUS': True}
-            with patch('community.require_packages'), patch('community.save_environment'), patch('subprocess.run') as run:
-                run.return_value.returncode, run.return_value.stdout = 1, 'dependency conflict'
+                   'PREPARAR_CORPUS': True, 'PLANO_REVISADO': True,
+                   'ENV_DIR': Path(directory)/'env', 'REPO_DIR': ROOT}
+            with patch('colab_environment.validate_environment', side_effect=ValueError('Conflitos no ambiente isolado')):
                 with self.assertRaisesRegex(ValueError, 'Conflitos'): exec(install, env)
                 self.assertFalse(env['AMBIENTE_OK'])
                 with self.assertRaisesRegex(ValueError, 'Conclua'): exec(train, env)
@@ -101,8 +102,7 @@ class CommunityColabTests(unittest.TestCase):
             run_dir = Path(directory); (run_dir / 'run.json').write_text('{}')
             env = {'MONTAR_DRIVE': True, 'AMBIENTE_OK': True, 'RUN_DIR': run_dir,
                    'hashlib': hashlib, 'panel': object(), 'panel_identity': ('old-run', 'old-hash')}
-            with patch('community.require_packages'):
-                with self.assertRaisesRegex(ValueError, 'Outra execução'): exec(code, env)
+            with self.assertRaisesRegex(ValueError, 'Outra execução'): exec(code, env)
 
     def test_corpus_preparation_retries_validate_without_changing_split(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -115,6 +115,26 @@ class CommunityColabTests(unittest.TestCase):
             self.assertEqual(before, (root / 'frozen/test.jsonl').read_bytes())
             (root / 'frozen/test.jsonl').write_text('tampered\n')
             with self.assertRaises(ValueError): prepare_project(root)
+
+    def test_closed_interface_can_reopen_and_live_interface_is_reused(self):
+        nb = json.loads((ROOT / 'TESTAR-ADAPTADOR.ipynb').read_text())
+        code = next(''.join(c['source']) for c in nb['cells'] if 'ABRIR_INTERFACE = False' in ''.join(c['source']))
+        code = code.replace('ABRIR_INTERFACE = False', 'ABRIR_INTERFACE = True')
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory); (run_dir / 'run.json').write_text('{}')
+            closed = SimpleNamespace(_ft05_worker=SimpleNamespace(closed=True), close=Mock())
+            live = SimpleNamespace(_ft05_worker=SimpleNamespace(closed=False))
+            identity = (str(run_dir.resolve()), hashlib.sha256(b'{}').hexdigest())
+            env = {'MONTAR_DRIVE': True, 'AMBIENTE_OK': True, 'RUN_DIR': run_dir,
+                   'CORPUS': run_dir/'corpus', 'FROZEN': run_dir/'frozen',
+                   'ENV_PYTHON': run_dir/'venv/bin/python', 'hashlib': hashlib,
+                   'panel': closed, 'panel_identity': identity}
+            with patch('colab_ui.launch', return_value=live) as launch:
+                exec(code, env)
+                self.assertIs(env['panel'], live)
+                closed.close.assert_called_once()
+                exec(code, env)
+                launch.assert_called_once()
 
 
 if __name__ == '__main__':

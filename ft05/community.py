@@ -1,13 +1,12 @@
 """Small offline helpers for the community Colab workflow."""
 import hashlib
-import importlib.metadata
 import json
 import re
+import subprocess
 from pathlib import Path
 
-VERSIONS = {'unsloth': '2026.10.6', 'torch': '2.11.0+cu128',
-            'transformers': '5.13.1', 'trl': '1.15.0',
-            'datasets': '4.8.5', 'peft': '0.19.1'}
+from dependencies import VERSIONS, package_status, require_packages
+
 
 
 def paths(folder, run_name, drive_root=Path('/content/drive/MyDrive')):
@@ -47,39 +46,9 @@ def prepare_project(root):
             'split_sha256': split_hash, 'human_reviewed': False}
 
 
-def package_status():
-    status = {}
-    for name in VERSIONS:
-        try:
-            status[name] = importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            status[name] = 'ausente'
-    return status
-
-
-def require_packages():
-    found = package_status()
-    wrong = [name for name in VERSIONS if found[name] != VERSIONS[name]]
-    if wrong:
-        raise ValueError('Confira/instale as dependências antes de continuar: ' + ', '.join(wrong))
-
-
-def save_environment(root):
-    """Record a lock of installed distributions without shell URLs or env dumps."""
-    packages = sorted({(dist.metadata['Name'], dist.version)
-                       for dist in importlib.metadata.distributions()
-                       if dist.metadata['Name']})
-    destination = Path(root) / 'requirements-lock-colab.txt'
-    destination.write_text(''.join(f'{name}=={version}\n' for name, version in packages),
-                           encoding='utf-8')
-    return destination
-
-
-def train_project(selected):
+def train_project(selected, runtime_python):
     """One explicit synthetic run; never overwrite a previous config or run."""
     from ft05 import load_frozen
-    from train import run
-    require_packages()
     load_frozen(selected['corpus'], selected['frozen'])
     run_dir = selected['run']
     config_path = selected['root'] / (run_dir.name + '-config.json')
@@ -91,5 +60,14 @@ def train_project(selected):
     with config_path.open('x', encoding='utf-8') as file:
         json.dump(config, file, indent=2)
         file.write('\n')
-    return run(selected['corpus'], config_path, run_dir, execute=True,
-               frozen_dir=selected['frozen'])
+    source = Path(__file__).resolve().parent
+    command = ('import runpy,sys; sys.path.insert(0,sys.argv.pop(1)); '
+               'runpy.run_module(\"train\",run_name=\"__main__\")')
+    subprocess.run([str(runtime_python), '-I', '-B', '-c', command, str(source),
+                    str(selected['corpus']), '--config', str(config_path),
+                    '--output', str(run_dir), '--frozen', str(selected['frozen']), '--train'],
+                   check=True)
+    result = json.loads((run_dir / 'run.json').read_text())
+    if result.get('trained') is not True:
+        raise ValueError('Treino incompleto; preserve a pasta para investigar.')
+    return result

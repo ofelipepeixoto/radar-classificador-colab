@@ -24,4 +24,4 @@ Somente depois da seleção de tarefa e de 200–500 exemplos independentes revi
 reavaliar os gates de treino; ambiente GPU e orçamento são decisões separadas.
 
 Verificação sem dependências: na raiz,
-`PYTHONPATH=experiments/ft05 python -m unittest discover -s ft05/tests -v`.
+`PYTHONPATH=ft05 python -m unittest discover -s ft05/tests -v`.

@@ -27,7 +27,13 @@ $env:PYTHONPATH = "ft05"
 python -m unittest discover -s ft05/tests -v
 ```
 
-Esses testes não instalam Unsloth, não baixam pesos e não executam treino. Eles verificam o código que pode ser exercitado sem GPU. Passarem não comprova instalação ou inferência no Colab.
+Esses testes não instalam a stack de treino, não baixam pesos e não executam treino em GPU. Eles verificam o código que pode ser exercitado offline; o teste opcional de integração real fica desativado por padrão. Passarem não comprova instalação, CUDA ou inferência no Colab.
+
+A rota atual usa Transformers + PEFT + TRL em ambiente isolado, com LoRA em 16 bits. Ao alterar dependências, mantenha coerentes `ft05/dependencies.py`, as versões diretas em `requirements-colab.txt` e o lock completo `requirements-colab-lock.txt`. O lock é específico para Python 3.12/Linux x86_64 e requer resolução e revisão de hashes. Não copie pacotes do kernel nem use `--system-site-packages` para contornar conflitos.
+
+O helper cria o ambiente com `venv --without-pip` e usa o pip do kernel com `--python` apontando ao ambiente isolado. Não suponha que `env/bin/python -m pip` funcione. Preserve essa separação e os hashes ao alterar a instalação; para o usuário do tutorial, as células fazem essas operações.
+
+O teste real opcional usa um modelo Qwen minúsculo aleatório, local e CPU: verifica um passo de backward/AdamW em LoRA, gravação, reabertura, geração e preparação de dados pelo construtor `SFTTrainer`. **Não chama `SFTTrainer.train()`**, cujo caminho depende de Triton/CUDA nessa versão. O teste exige as bibliotecas instaladas em ambiente separado e pode ser executado com `RUN_HF_CPU_INTEGRATION=1` junto do comando de testes. Não baixa a base 1,5B, não substitui homologação na GPU e não mede a qualidade do classificador.
 
 Quando mudar o notebook ou seu gerador, mantenha os dois consistentes e registre o que foi executado no Colab. Uma alteração somente documental não exige treinar novamente. Teste o caminho afetado pela alteração.
 
@@ -37,6 +43,7 @@ Quando mudar o notebook ou seu gerador, mantenha os dois consistentes e registre
 - Comando executado e resultado dos testes.
 - Commit, Python, GPU e versões, se houve execução no Colab.
 - Etapas ainda não verificadas.
+- Resolução do lock, `pip check` do ambiente isolado e resultado da integração CPU, se a alteração envolver o backend.
 - Exemplo fictício mínimo para reproduzir falhas do classificador.
 
 Não inclua tokens, mensagens de clientes, notebook com saídas pessoais, pastas do Drive, pesos ou adaptadores. Limpe saídas antes de enviar notebooks. Consulte a licença e o registro de origem quando reutilizar código.
@@ -45,6 +52,6 @@ Não inclua tokens, mensagens de clientes, notebook com saídas pessoais, pastas
 
 O corpus atual é sintético e não possui aprovação humana. Não marque `reviewed: true` com base apenas em uma checagem automática.
 
-Não ajuste o treino usando os erros do teste congelado ou dos ensaios exploratórios como guia para aumentar suas métricas. Uma proposta de novo corpus precisa explicar procedência, critérios de rótulo, separação entre treino e avaliação e prevenção de duplicatas. Mudanças de modelo e dependências precisam de uma execução verificável em ambiente limpo.
+Não ajuste o treino usando os erros do teste congelado ou dos ensaios exploratórios como guia para aumentar suas métricas. Uma proposta de novo corpus precisa explicar procedência, critérios de rótulo, separação entre treino e avaliação e prevenção de duplicatas. Mudanças de modelo e dependências precisam de uma execução verificável em ambiente limpo. Registre resultados do novo backend separadamente dos resultados históricos do piloto com Unsloth.
 
 Não existe um requisito de preencher manualmente as 216 linhas antigas para contribuir com documentação ou executar o piloto sintético. Uma avaliação com dados reais é um trabalho separado e requer rótulos independentes.

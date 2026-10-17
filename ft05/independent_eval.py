@@ -257,32 +257,17 @@ def predict(directory, sealed_dir, run_dir, output, corpus, frozen):
     run_dir, output = Path(run_dir), Path(output)
     if output.exists():
         raise ValueError('output_already_exists')
-    from personal_smoke import preflight
-    from train import load_pinned_model
+    from personal_smoke import preflight, load_saved_adapter
+    from train import TRAINING_BACKEND, generate_response
     checked = preflight(run_dir, corpus, frozen)
     run_manifest, meta = checked['run_file'], checked['meta']
     frozen_hash = checked['frozen_manifest_sha256']
     adapter, config, weights = checked['adapter'], checked['config'], checked['weights']
-    from unsloth import FastLanguageModel
-    import torch
-    from peft import PeftModel
-    if not torch.cuda.is_available():
-        raise ValueError('cuda_required')
-    base, tokenizer, loaded_name = load_pinned_model(FastLanguageModel, meta['revision'])
-    if hashlib.sha256(tokenizer.chat_template.encode()).hexdigest() != meta['chat_template_sha256']:
-        raise ValueError('chat_template_changed')
-    model = PeftModel.from_pretrained(base, str(adapter), is_trainable=False)
-    FastLanguageModel.for_inference(model)
-    model.eval()
+    model, tokenizer, loaded_name = load_saved_adapter(checked)
     predictions = {}
-    with torch.inference_mode():
-        for row in sample:
-            prompt = tokenizer.apply_chat_template([{'role': 'user', 'content': row['text']}],
-                                                    tokenize=False, add_generation_prompt=True)
-            inputs = tokenizer(prompt, return_tensors='pt', add_special_tokens=False).to(model.device)
-            generated = model.generate(**inputs, max_new_tokens=96, do_sample=False)
-            predictions[row['id']] = tokenizer.decode(
-                generated[0][inputs['input_ids'].shape[-1]:], skip_special_tokens=True)
+    for row in sample:
+        predictions[row['id']], _ = generate_response(
+            model, tokenizer, [{'role': 'user', 'content': row['text']}])
     output.mkdir(parents=True)
     write_json(output / 'predictions.json', predictions)
     write_json(output / 'manifest.json', {'scope': 'independent_private_evaluation',
@@ -291,6 +276,7 @@ def predict(directory, sealed_dir, run_dir, output, corpus, frozen):
                'run_sha256': sha256(run_manifest), 'adapter_config_sha256': sha256(config),
                'adapter_weights_sha256': sha256(weights), 'corpus_sha256': sha256(corpus),
                'frozen_manifest_sha256': frozen_hash, 'model': loaded_name,
+               'training_backend': TRAINING_BACKEND,
                'model_inference_executed': True, 'training_performed': False})
     return {'predictions': len(predictions), 'model_inference_executed': True}
 

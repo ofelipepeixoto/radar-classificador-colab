@@ -7,7 +7,8 @@ from pathlib import Path
 from auto_pilot import write_auto_dataset
 from ft05 import prepare
 from personal_smoke import REVISION, preflight, sha256, validate_messages
-from train import MODEL
+from train import MODEL, TRAINING_BACKEND, MIN_GPU_BYTES, MAX_CONTEXT, MAX_NEW_TOKENS
+from dependencies import VERSIONS
 from adapter_integrity import adapter_hashes
 
 
@@ -38,10 +39,12 @@ class PersonalSmokeTests(unittest.TestCase):
                     'revision': REVISION, 'exact_model_name_required': True,
                     'review_mode': 'synthetic_machine_checked',
                     'human_reviewed': False, 'trained': True,
+                    'training_backend': TRAINING_BACKEND, 'precision': 'bf16', 'quantization': False,
+                    'compute': {'precision': 'bf16', 'total_memory_bytes': MIN_GPU_BYTES},
+                    'max_context': MAX_CONTEXT, 'max_new_tokens': MAX_NEW_TOKENS,
                     'dataset_sha256': sha256(corpus),
                     'frozen_manifest_sha256': sha256(frozen / 'manifest.json'),
-                    'versions': {name: 'test' for name in
-                                 ('unsloth', 'torch', 'transformers', 'trl', 'datasets', 'peft')}}
+                    'versions': dict(VERSIONS)}
             meta['adapter_artifacts_sha256'] = adapter_hashes(run_dir / 'adapter', MODEL, REVISION)
             # load_frozen returns the hash of the exact frozen manifest bytes.
             self.assertEqual(meta['frozen_manifest_sha256'], sha256(frozen / 'manifest.json'))

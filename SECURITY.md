@@ -15,12 +15,19 @@ Não envie tokens, chaves, credenciais, documentos ou mensagens de clientes ao c
 - Instalação e treinamento exigem ativação explícita; `INSTALAR_DEPENDENCIAS` e `TREINAR` começam em `False` nas respectivas células.
 - Cada pessoa escolhe uma pasta nova; uma tentativa existente deve ser preservada para diagnóstico.
 - Corpus, split e artefatos passam por verificações de integridade antes de uso.
-- A retomada aceita o adaptador produzido por este fluxo com os registros esperados. O adaptador legado privado `run-002-g4` não é importado automaticamente.
+- A reabertura para inferência aceita o adaptador produzido pelo backend atual com os registros esperados. O adaptador legado privado `run-002-g4` não é importado automaticamente. Retomar treino de checkpoint não está implementado.
 - A interface de widgets fica no notebook e não abre um servidor público ou link externo de inferência.
+- As 94 distribuições do ambiente de treino são fixadas por URLs diretas e hashes, para Python 3.12/Linux x86_64. O instalador exige `--require-hashes` e `--no-index`, confere versões, executa `pip check` e verifica CUDA antes de liberar ações GPU.
 
 Hashes permitem detectar mudanças nos bytes. Eles não autenticam arquivos recebidos de desconhecidos, não revisam o conteúdo dos dados e não comprovam a qualidade do modelo. Use somente artefatos da sua própria execução ou de uma procedência que você tenha verificado.
 
-As versões de dependências são fixadas para reproduzir a configuração declarada do piloto. Fixar versões não significa que todos os pacotes foram auditados ou que serão compatíveis com qualquer runtime. Mudanças de dependência devem ser revisadas e testadas em sessão limpa.
+Treino e inferência usam Transformers + PEFT + TRL em `/content/radar-classificador-env-hf`, um ambiente sem `system-site-packages`. O kernel Colab não recebe esses pacotes. Esse isolamento evita herdar conflitos do kernel; **não é uma barreira de segurança** contra código malicioso e mantém as permissões de acesso do processo, inclusive ao Drive montado.
+
+O ambiente é criado com `venv --without-pip`. O pip já disponível no kernel é chamado com `--python` apontando ao Python isolado, conforme a [documentação oficial do pip](https://pip.pypa.io/en/stable/topics/python-option/). Assim, não se depende de `ensurepip` no Colab e a instalação continua restrita ao destino isolado, com o mesmo lock. Os processos de inferência usam `-B` para não gerar bytecode no código conferido.
+
+O treino só pode ser declarado concluído após as verificações de passos, perdas e métricas finitas; a seleção BF16 exige suporte nativo, usando FP16 quando ele não existe. Na T4 observada, o treino FP16 concluiu 63 passos e passou por essas verificações. A pós-verificação conferiu pesos, selo, corpus, split e métricas. Em uma VM nova, após reinstalação e nova conferência do selo, o adaptador foi reaberto sem retreino. Esses controles não substituem avaliar a qualidade do adaptador.
+
+Fixar versões e hashes não comprova que todos os pacotes são seguros ou que funcionarão em qualquer runtime. A resolução sem GPU não valida CUDA, driver, memória ou treinamento. Mudanças de dependência devem ser revisadas e testadas em sessão limpa.
 
 ## Limites de uso
 
@@ -36,10 +43,18 @@ Inclua a revisão afetada, etapa, impacto e reprodução mínima com dados fict�
 
 Para erros de classificação, instalação ou interface sem impacto de segurança, abra uma issue comum com o diagnóstico sanitizado.
 
-## Aviso de dependência conhecido
+## Datasets atualizado
 
-A consulta de 17/10/2026 encontrou [GHSA-379c-qx7v-6h59 / CVE-2026-66007](https://github.com/advisories/GHSA-379c-qx7v-6h59) em `datasets==4.8.5`: metadados `file_name` de carregadores baseados em pastas podem ler arquivos fora do diretório. A versão corrigida informada é `5.0.1`, mas a Unsloth `2026.10.6` exige `datasets<5.0.0`. Não é seguro forçar uma instalação incompatível ou ignorar `pip check`.
+A extração inicial fixava Datasets `4.8.5`, afetado por [GHSA-379c-qx7v-6h59](https://github.com/advisories/GHSA-379c-qx7v-6h59). A nova rota remove Unsloth e sua restrição `<5.0.0`, permitindo Datasets `5.0.1`, a versão corrigida informada no aviso. Esse tratamento é acompanhado na [issue #3](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/3).
 
-O fluxo daqui usa somente `Dataset.from_dict` com texto sintético validado em memória. Não usa `load_dataset`, builders de pastas, `save_to_disk` ou `push_to_hub`. Assim, o caminho descrito no aviso não está exposto pelo exercício. Essa restrição é uma mitigação de escopo, não uma correção da biblioteca. A troca por uma combinação corrigida e compatível permanece pendente antes de anunciar uma versão estável; não expanda a entrada para datasets externos nessa configuração.
+O exercício continua usando apenas `Dataset.from_dict` com texto sintético validado em memória. A atualização não autoriza ampliar o fluxo para datasets externos, builders de pasta ou arquivos de clientes.
 
-O scanner consultou cinco das seis dependências diretas; a variante CUDA de Torch e o lock transitivo completo não foram auditados. Não existe conclusão de “zero vulnerabilidades”.
+## Risco residual em Accelerate
+
+[GHSA-4j2p-28q2-5m79 / CVE-2026-69112](https://github.com/advisories/GHSA-4j2p-28q2-5m79) trata de caminhos não validados em `weight_map` de índices de checkpoints fragmentados. O feed lista versões até `1.14.0` e nenhuma correção confirmada. A ausência de alerta OSV para `1.15.0` não comprova correção: a inspeção do wheel usado nesta rota ainda encontrou o caminho de código relevante.
+
+A aplicação restringe o carregamento à base conhecida em revisão fixa, sem código remoto, e a um adaptador local do próprio treino: `adapter_config.json` e `adapter_model.safetensors`, com hashes conferidos. Índices de fragmentos, pesos pickle e o caminho de dispatch de checkpoints externos não são entradas permitidas. Isso reduz a exposição do exercício; **não corrige a biblioteca Accelerate**. Não carregue checkpoints de terceiros nem amplie formatos sem rever essa limitação.
+
+O risco residual é acompanhado na [issue #5](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/5). Não há conclusão de “zero vulnerabilidades”. A [auditoria](docs/AUDITORIA.md) distingue inspeção de código, testes offline, treino e reabertura reais na T4. Replicação independente, revisão das PRs e publicação estável permanecem na [issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2).
+
+A replicação por outro operador em uma segunda conta independente ainda não foi comprovada. A autenticação do Drive exigiu interação manual e foi concluída pelo operador antes da reabertura. Esse registro público não contém identidade da conta, URLs privadas, tokens de autenticação ou arquivos do Drive.

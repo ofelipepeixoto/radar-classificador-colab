@@ -5,14 +5,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO_URL = 'https://github.com/ofelipepeixoto/radar-classificador-colab.git'
-REPO_REF = 'feat/community-initial'  # Draft distribution; verified by content below.
+REPO_REF = 'fix/safe-training-dependencies'  # Draft distribution; verified by content below.
 
 
 def source_manifest():
+    files = [path for folder in ('ft05', 'scripts')
+             for path in sorted((ROOT / folder).rglob('*'))
+             if path.is_file() and '__pycache__' not in path.parts
+             and path.suffix in {'.py', '.json', '.jsonl', '.csv'}]
+    files += [ROOT / 'requirements-colab.txt', ROOT / 'requirements-colab-lock.txt']
     return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for folder in ('ft05', 'scripts') for path in sorted((ROOT / folder).rglob('*'))
-            if path.is_file() and '__pycache__' not in path.parts
-            and path.suffix in {'.py', '.json', '.jsonl', '.csv'}}
+            for path in files}
 
 
 def cell(kind, source):
@@ -39,7 +42,7 @@ O corpus é sintético, sem aprovação humana; não valida atendimento real.
 
 Salve uma cópia no seu Drive. Execute uma célula por vez, na ordem.
 Cada etapa tem sua própria caixa de ativação; todas começam desmarcadas.
-Não use “Executar tudo”. Leia o [guia do projeto](https://github.com/ofelipepeixoto/radar-classificador-colab/blob/feat/community-initial/docs/COMECE-AQUI.md).
+Não use “Executar tudo”. Leia o [guia do projeto](https://github.com/ofelipepeixoto/radar-classificador-colab/blob/fix/safe-training-dependencies/docs/COMECE-AQUI.md).
 ''')
     md('''## Configuração — ''' + ('informe a mesma pasta e execução do seu treino' if inference_only else 'escolha uma pasta nova') + '''
 
@@ -48,15 +51,17 @@ Altere somente os dois campos abaixo. Use letras, números, `_` ou `-` e `/` ent
     code('''from pathlib import Path
 import hashlib, importlib.metadata, json, re, shutil, subprocess, sys
 
-PASTA_PROJETO = 'RadarClassificador/meu-piloto-001' # @param {type:"string"}
+PASTA_PROJETO = 'RadarClassificador/homologacao-001' # @param {type:"string"}
 NOME_EXECUCAO = 'run-001' # @param {type:"string"}
 
 REPO_DIR = Path('/content/radar-classificador-colab')
+ENV_DIR = Path('/content/radar-classificador-env-hf')
+ENV_PYTHON = ENV_DIR / 'bin/python'
 if (not PASTA_PROJETO or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', p)
                            for p in PASTA_PROJETO.split('/'))
         or len(PASTA_PROJETO) > 150
         or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', NOME_EXECUCAO)):
-    raise ValueError('Use nomes simples e pasta relativa como RadarClassificador/meu-piloto-001.')
+    raise ValueError('Use nomes simples e pasta relativa como RadarClassificador/homologacao-001.')
 ROOT = Path('/content/drive/MyDrive') / PASTA_PROJETO
 CORPUS = ROOT / 'synthetic-machine-checked.jsonl'
 FROZEN = ROOT / 'frozen'
@@ -68,11 +73,12 @@ print('Sua execução:', RUN_DIR.name)
 
 Selecione um runtime com GPU na interface do Colab e confira as unidades da sua conta.
 Não é necessário escolher a GPU mais cara. A GPU e o tempo disponíveis variam.
-O ambiente de origem usou Python 3.12; a nova cópia ainda precisa de teste GPU completo.''')
+Use Python 3.12 e uma GPU de classe 16 GB ou maior. O código verificará CUDA 12.9.
+A nova rota usa Transformers + PEFT + TRL, sem Unsloth; a homologação GPU ainda está pendente.''')
     code('''print('Python:', sys.version.split()[0])
 gpu = shutil.which('nvidia-smi')
 if gpu:
-    result = subprocess.run([gpu, '--query-gpu=name,memory.total', '--format=csv,noheader'],
+    result = subprocess.run([gpu, '--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'],
                             capture_output=True, text=True, timeout=30)
     print('GPU:', result.stdout.strip() if result.returncode == 0 else result.stderr.strip())
 else:
@@ -109,6 +115,7 @@ if OBTER_CODIGO:
                for p in (REPO_DIR / folder).rglob('*')
                if p.is_file() and '__pycache__' not in p.parts
                and p.suffix in {{'.py', '.json', '.jsonl', '.csv'}}}}
+    actual.update({{'requirements-colab.txt', 'requirements-colab-lock.txt'}})
     if actual != set(manifest):
         raise ValueError('Arquivos inesperados no código. Use uma sessão limpa.')
     sys.path.insert(0, str(REPO_DIR / 'ft05'))
@@ -156,53 +163,53 @@ Autorize somente sua conta. O código passa a ter acesso ao Drive montado.
     print('Drive não montado por esta célula. Marque MONTAR_DRIVE para continuar.')
 '''
     code(source)
-    md('''## 4. Confira as dependências
+    md('''## 4. Confira o plano das dependências
 
-Marque **CONFERIR_DEPENDENCIAS**. Veja o que está presente.
-Se houver diferenças, marque também **RESOLVER_INSTALACAO**: o pip calcula um plano sem instalar.
-As seis versões vêm da execução anterior do autor; dependências transitivas podem mudar.''')
+Marque **CONFERIR_DEPENDENCIAS** e **REVISAR_PLANO**.
+A preparação desta versão resolveu as 94 dependências. Confira o plano fixado por hashes;
+essa etapa não instala nem baixa os pacotes CUDA. O ambiente fica separado do Python do Colab.
+Datasets 5.0.1 substitui a versão afetada. Veja o risco residual documentado de Accelerate em `SECURITY.md`.''')
     code('''CONFERIR_DEPENDENCIAS = False # @param {type:"boolean"}
-RESOLVER_INSTALACAO = False # @param {type:"boolean"}
+REVISAR_PLANO = False # @param {type:"boolean"}
+PLANO_REVISADO = False
 if CONFERIR_DEPENDENCIAS:
     if not MONTAR_DRIVE or not FROZEN.is_dir():
         raise ValueError('Conclua a etapa 3 antes de continuar.')
-    from community import VERSIONS, package_status
-    for package, current in package_status().items():
-        print(package, 'necessário:', VERSIONS[package], '| presente:', current)
-    if RESOLVER_INSTALACAO:
-        plan_file = Path('/content/radar-classificador-pip-plan.json')
-        subprocess.run([sys.executable, '-m', 'pip', 'install', '--dry-run', '--report',
-                        str(plan_file), *[f'{k}=={v}' for k, v in VERSIONS.items()]], check=True)
-        for item in json.loads(plan_file.read_text()).get('install', []):
-            print('Plano:', item['metadata']['name'], item['metadata']['version'])
-        print('Plano pronto. Nada foi instalado.')
+    from colab_environment import check_platform, locked_plan, environment_status
+    check_platform()
+    lock, lock_sha = locked_plan(REPO_DIR)
+    present = environment_status(ENV_DIR)
+    if REVISAR_PLANO:
+        for item in lock['distributions']:
+            name = item['name']
+            print(name, 'necessário:', item['version'], '| presente:', present.get(name.lower().replace('_', '-'), 'ausente'))
+        print('Plano:', len(lock['distributions']), 'pacotes | SHA-256:', lock_sha)
+        print('Nada foi instalado. O ambiente padrão do Colab será preservado.')
+        PLANO_REVISADO = True
+    else:
+        print('Marque também REVISAR_PLANO para conferir as versões fixadas.')
 else:
     print('Marque CONFERIR_DEPENDENCIAS para verificar o ambiente.')
 ''')
-    md('''## 5. Instale somente se necessário
+    md('''## 5. Instale no ambiente isolado e verifique CUDA
 
-Se as versões já coincidem, deixe a caixa desmarcada e execute para confirmar.
-Para instalar o plano visto acima, marque **INSTALAR_DEPENDENCIAS**.
-Depois da instalação, se o Colab pedir reinício, reinicie e repita Configuração e etapas 1–4.
-Não use `import torch` antes da Unsloth. A instalação consome tempo e rede.''')
+Na primeira execução, marque **INSTALAR_DEPENDENCIAS**. O download pode levar vários minutos.
+Todos os pacotes e hashes vêm do plano anterior, sem alterar o Python do notebook.
+Nas repetições, deixe a caixa desmarcada para verificar o ambiente já instalado.
+A etapa só libera o treino após conferir versões, conflitos e GPU. Não requer reiniciar o kernel.''')
     code('''INSTALAR_DEPENDENCIAS = False # @param {type:"boolean"}
 AMBIENTE_OK = False
-if CONFERIR_DEPENDENCIAS:
-    from community import VERSIONS, require_packages, save_environment
+if CONFERIR_DEPENDENCIAS and PLANO_REVISADO:
+    from colab_environment import install_environment, validate_environment, save_environment
     if INSTALAR_DEPENDENCIAS:
-        if not RESOLVER_INSTALACAO:
-            raise ValueError('Resolva e revise o plano da etapa 4 antes de instalar.')
-        subprocess.run([sys.executable, '-m', 'pip', 'install',
-                        *[f'{k}=={v}' for k, v in VERSIONS.items()]], check=True)
-    require_packages()
-    print('Dependências: OK. Lock privado:', save_environment(ROOT))
-    check = subprocess.run([sys.executable, '-m', 'pip', 'check'], capture_output=True, text=True)
-    if check.returncode:
-        raise ValueError('Conflitos no ambiente; não treine antes de resolver: ' + check.stdout)
+        install_environment(ENV_DIR, REPO_DIR)
+    environment = validate_environment(ENV_DIR, REPO_DIR)
+    print('GPU e precisão:', environment['gpu'])
+    print('Dependências e pip check: OK. Registro privado:', save_environment(ROOT, environment))
     AMBIENTE_OK = True
-    print('pip check: OK. Nenhum treinamento foi iniciado.')
+    print('Treinamento: não iniciado. Ambiente isolado pronto.')
 else:
-    print('Conclua a etapa 4 primeiro.')
+    print('Conclua e revise o plano da etapa 4 primeiro.')
 ''')
     if not inference_only:
         md('''## 6. Treine o seu adaptador — ação explícita, com GPU
@@ -218,7 +225,7 @@ if TREINAR:
             and ORCAMENTO_GPU_CONFIRMADO and DEPENDENCIAS_REVISADAS):
         raise ValueError('Conclua as etapas anteriores e confirme orçamento e dependências.')
     from community import train_project
-    result = train_project(selected)
+    result = train_project(selected, ENV_PYTHON)
     print('Treino concluído:', result['trained'])
     print('Adaptador no seu Drive:', RUN_DIR / 'adapter')
     print('Manifesto:', RUN_DIR / 'run.json')
@@ -235,14 +242,15 @@ Saídas do notebook podem ser salvas pelo Colab: limpe-as antes de compartilhar 
 if ABRIR_INTERFACE:
     if not MONTAR_DRIVE or not globals().get('AMBIENTE_OK', False):
         raise ValueError('Conclua as etapas de código, Drive e dependências primeiro.')
-    from community import require_packages
-    require_packages()
     requested_identity = (str(RUN_DIR.resolve()), hashlib.sha256((RUN_DIR / 'run.json').read_bytes()).hexdigest())
     if 'panel' in globals() and globals().get('panel_identity') != requested_identity:
         raise ValueError('Outra execução já está carregada. Reinicie a sessão para trocar de adaptador.')
+    if 'panel' in globals() and getattr(getattr(panel, '_ft05_worker', None), 'closed', True):
+        panel.close()
+        del panel
     if 'panel' not in globals():
-        from personal_ui import launch
-        panel = launch(RUN_DIR, CORPUS, FROZEN)
+        from colab_ui import launch
+        panel = launch(ENV_PYTHON, RUN_DIR, CORPUS, FROZEN)
         panel_identity = requested_identity
     else:
         print('Interface já carregada nesta sessão. Use o campo de mensagem acima.')
@@ -252,7 +260,7 @@ else:
     md('''## Ao terminar
 
 Confira no Drive `run.json`, `adapter/` e `comparison.json`. Não compartilhe a pasta do Drive.
-Para retomar, use `TESTAR-ADAPTADOR.ipynb` com os mesmos nomes de pasta e execução.
+Para reabrir o adaptador salvo sem treinar novamente, use `TESTAR-ADAPTADOR.ipynb` com os mesmos nomes de pasta e execução.
 Encerre o runtime pelo menu do Colab para liberar a GPU; salvar o notebook não salva a VM.
 Uma instalação nova pode ser necessária na próxima sessão. Não retreine com os erros do teste congelado.
 

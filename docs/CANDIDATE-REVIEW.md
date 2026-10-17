@@ -1,5 +1,10 @@
 # FT05 — revisão do corpus sintético candidato
 
+Este é um procedimento avançado de curadoria, preservado do projeto de
+origem. O notebook público para iniciantes usa o piloto sintético automático
+e não exige preencher esta planilha. O antigo notebook `FT05.ipynb` e suas
+flags de promoção não fazem parte da nova rota pública de treinamento.
+
 `candidates-216.jsonl` contém **216 propostas originais, sintéticas e não revisadas**.
 São 18 por combinação de quatro categorias e três urgências. A distribuição foi
 balanceada deliberadamente para avaliação de contrato; **não representa** o
