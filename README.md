@@ -2,13 +2,16 @@
 
 Crie e teste **seu próprio adaptador de IA** para classificar mensagens, usando a GPU do Google Colab e salvando os resultados no seu Google Drive. No computador, você usa o navegador.
 
-**Estado: projeto educacional experimental.** O fluxo separado neste repositório ainda precisa concluir uma execução inteira em uma segunda conta Google e pasta nova. Não está homologado para atendimento real.
+**Estado: projeto educacional experimental.** O novo treino na T4 e os testes de interface foram concluídos; a reinstalação e a reabertura do adaptador em uma VM nova ainda estão em homologação. Revisão das PRs e versão estável permanecem pendentes. Não está homologado para atendimento real.
+
+**A replicação por outro operador em uma segunda conta independente ainda não foi comprovada.** Na VM nova, Python/GPU e código/testes passaram; a montagem do Drive está bloqueada por uma etapa de autenticação Google que exige interação manual. O registro não declara a reabertura concluída.
 
 A nova rota usa **Transformers + PEFT + TRL**, com LoRA em 16 bits e ambiente
 isolado. Ela remove a dependência de Unsloth e permite Datasets `5.0.1`.
 Há um [risco residual em Accelerate](SECURITY.md#risco-residual-em-accelerate),
 limitado pelo formato e pela origem dos pesos aceitos. A biblioteca não é
-declarada corrigida. Instalação e execução na GPU ainda precisam de homologação.
+declarada corrigida. O [registro de homologação](docs/HOMOLOGACAO-COLAB-2026-10-17.md)
+separa as etapas concluídas da reabertura ainda pendente.
 
 ## Comece por aqui
 
@@ -40,19 +43,20 @@ Ela recebe uma mensagem e devolve dois campos:
 ## O que você precisa
 
 - Conta Google, acesso ao Colab e espaço no Drive.
-- Python 3.12 em runtime Colab Linux x86_64, com GPU de classe 16 GB ou maior e driver compatível com a distribuição CUDA 12.9 usada pela receita. O notebook verifica a memória em bytes; GPUs de 16 GB podem aparecer com aproximadamente 15 GiB. Isso não garante que a receita caiba ou funcione em toda T4 ou outra GPU.
+- Python 3.12 em runtime Colab Linux x86_64. A imagem verificada foi `2026.07`; se `Latest` apresentar Python 3.13, selecione `2026.07` e confira o Python novamente. Não altere o lock para contornar essa exigência.
+- GPU de classe 16 GB ou maior e driver compatível com CUDA 12.9. A T4 observada treinou em FP16; o verificador aceita pelo menos 14 GiB utilizáveis, considerando a reserva do driver. Isso não garante execução em toda GPU ou sessão.
 - Tempo e unidades de computação na sua conta. Disponibilidade e consumo variam; o projeto não garante execução gratuita.
 - Mensagens fictícias para testar a interface.
 
 O modelo base continua `Qwen/Qwen2.5-1.5B-Instruct`, na revisão fixada. O treinamento cria um adaptador LoRA sem quantização de 4/8 bits. A instalação usa um ambiente Python separado em `/content/radar-classificador-env-hf`, sem herdar os pacotes do kernel Colab. Treino e inferência rodam nesse ambiente; a interface continua no navegador.
 
-O lock contém 94 distribuições com hashes para Python 3.12/Linux x86_64. A resolução foi verificada sem GPU. Um teste real em CPU também confirmou atualização LoRA, gravação, reabertura e geração com um modelo minúsculo local, além da preparação de dados pelo TRL. Isso não homologa o treino TRL em GPU, CUDA, memória ou qualidade do adaptador 1,5B. Reabrir um adaptador salvo é suportado; continuar um treinamento a partir de checkpoint não está implementado.
+O lock contém 94 distribuições com hashes para Python 3.12/Linux x86_64. Além dos testes offline e da integração CPU com modelo minúsculo, a instalação, CUDA e o treinamento TRL foram executados na T4: **63 passos**, com perdas e registros de gradiente finitos. A interface respondeu a duas mensagens fictícias. A reabertura do adaptador em VM nova ainda precisa terminar; continuar um treinamento a partir de checkpoint não está implementado.
 
 ## Dados e limites
 
 O corpus contém **208 exemplos sintéticos**: 162 de treino, 12 de validação e 34 de teste. Eles passaram por checagens automáticas e continuam com **`reviewed: false`**. O tutorial não pede que você preencha manualmente 216 linhas para executar esse piloto.
 
-O piloto original, com outro backend, obteve 32/34 acertos no teste sintético congelado e 20/24 em um ensaio exploratório posterior. São conjuntos pequenos, sintéticos e diferentes entre si. Também foram observadas urgências excessivas em pedidos sem prazo iminente. **O desempenho da nova rota ainda será medido**; esses números não representam desempenho com clientes reais nem garantem o mesmo resultado.
+O novo treino obteve **30/34 acertos (88,2%) e 100% de JSON válido** no teste sintético congelado. O piloto original, com outro backend, havia obtido 32/34 nesse teste e 20/24 em um ensaio exploratório posterior. Esses resultados pertencem a execuções e conjuntos identificados separadamente. São dados pequenos e sintéticos; não representam desempenho com clientes reais nem garantem o mesmo resultado em outro treino. No piloto original também foram observadas urgências excessivas em pedidos sem prazo iminente.
 
 O teste congelado serve para avaliação. Não ajuste os rótulos ou retreine com seus erros para aumentar a pontuação. Para outro domínio ou uso real, será necessário definir um protocolo novo, com dados autorizados e rótulos revisados de forma independente.
 

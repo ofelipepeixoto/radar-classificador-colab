@@ -2,15 +2,17 @@
 
 Você vai treinar um adaptador com mensagens fictícias e depois digitar novos textos em uma interface. Treino e inferência acontecem na GPU do Colab. Seu computador mostra a página no navegador.
 
-**Este fluxo ainda está em homologação.** A execução completa do novo repositório em segunda conta e pasta nova permanece pendente. Os resultados anteriores pertencem ao piloto de origem.
+**Este fluxo ainda está em homologação.** O novo treino na T4 concluiu 63 passos em FP16, com 30/34 acertos e 100% de JSON válido no teste sintético; duas mensagens fictícias também foram testadas pela interface. A reinstalação e a reabertura do adaptador em uma VM nova ainda estão pendentes, assim como a revisão das PRs e a versão estável. Isso não valida atendimento real.
+
+**A execução por outro operador em uma segunda conta independente ainda não foi comprovada.** A tentativa atual de reabertura passou nas verificações de Python, GPU e código/testes, mas parou na autenticação do Drive, aguardando uma confirmação manual na janela do Google.
 
 ## 1. Abra e salve sua cópia
 
 1. Abra [COMECE-AQUI.ipynb](../COMECE-AQUI.ipynb) no Colab.
 2. Use **Arquivo → Salvar uma cópia no Drive**.
 3. Dê um nome fácil de reconhecer, por exemplo `Meu classificador — treino.ipynb`.
-4. Em **Ambiente de execução → Alterar tipo de ambiente de execução**, selecione uma GPU de classe 16 GB ou maior disponível na sua conta e confira Python 3.12.
-5. Confira seu saldo e a disponibilidade da sessão. A receita usa Torch com CUDA 12.9; a compatibilidade com o driver e a GPU precisa passar pelas verificações. Uma GPU de 16 GB pode aparecer com cerca de 15 GiB, e passar pelo limite mínimo não comprova que todo o treino funcionará.
+4. Em **Ambiente de execução → Alterar tipo de ambiente de execução**, selecione uma GPU de classe 16 GB ou maior disponível na sua conta e confira Python 3.12. A imagem verificada foi `2026.07`. Se a opção `Latest` exibir Python 3.13, escolha `2026.07` no seletor de versão do runtime e repita a verificação; não relaxe as versões ou o lock para continuar em 3.13.
+5. Confira seu saldo e a disponibilidade da sessão. A receita usa Torch com CUDA 12.9; a compatibilidade com o driver e a GPU precisa passar pelas verificações. O verificador exige 14 GiB utilizáveis para GPUs da classe 16 GB, considerando a reserva do driver. A T4 observada passou e treinou em FP16; isso não garante funcionamento em toda sessão ou GPU.
 
 Execute as células na ordem apresentada. **Não use “Executar tudo”.** Leia a explicação da etapa e confira sua saída antes de seguir.
 
@@ -62,7 +64,7 @@ O notebook usa Transformers + PEFT + TRL para treinar LoRA em 16 bits, sem Unslo
 | ipywidgets | `8.1.8` |
 | setuptools | `83.0.0` |
 
-A instalação cria `/content/radar-classificador-env-hf`: um ambiente Python separado, **sem herdar os pacotes já instalados no Colab**. O arquivo `requirements-colab-lock.txt` fixa 94 distribuições com hashes para Python 3.12/Linux x86_64. O plano já vem resolvido: `REVISAR_PLANO` mostra suas versões e hashes sem baixar a distribuição CUDA. A resolução foi conferida sem GPU; instalar e executar na GPU ainda são etapas de homologação.
+A instalação cria `/content/radar-classificador-env-hf`: um ambiente Python separado, **sem herdar os pacotes já instalados no Colab**. O arquivo `requirements-colab-lock.txt` fixa 94 distribuições com hashes para Python 3.12/Linux x86_64. O plano já vem resolvido: `REVISAR_PLANO` mostra suas versões e hashes sem baixar a distribuição CUDA. Instalação, `pip check`, CUDA e treino já passaram na T4 observada; a reinstalação e a reabertura em VM nova ainda precisam terminar. Outras sessões continuam exigindo todas as verificações.
 
 Use as células fornecidas para revisar, instalar e conferir o ambiente. Elas criam o ambiente sem pip próprio e usam o pip disponível no Colab para gerenciar **somente o Python isolado**. Isso contorna a ausência de `ensurepip` em algumas sessões, mantendo as mesmas 94 dependências fixadas.
 
@@ -110,6 +112,7 @@ Aqui, **reabrir** significa carregar um adaptador já concluído para fazer infe
 | GPU abaixo do limite ou incompatível com CUDA | Use uma sessão compatível; não desative a verificação de memória ou driver |
 | Código ausente | Execute a etapa de obtenção do código antes das importações |
 | Drive indisponível | Execute a montagem e confira a conta e a `PASTA_PROJETO` |
+| `ValueError: mount failed` após espera na autenticação | Conclua a confirmação pendente na janela do Google, usando **Continuar** quando exibido; volte ao notebook e repita somente a célula de montagem. A reabertura só prossegue quando o Drive estiver disponível |
 | `PackageNotFoundError` ou Python isolado ausente | Conclua a instalação pela célula fornecida; não instale no kernel com `%pip` |
 | Erro antigo sobre `ensurepip` | Use a cópia atualizada do notebook e repita a célula de instalação; o fluxo atual cria o ambiente sem pip próprio |
 | Versões divergentes | Preserve a saída e confira o diagnóstico antes de continuar |
