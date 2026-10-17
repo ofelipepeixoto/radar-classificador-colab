@@ -13,6 +13,18 @@ limitado pelo formato e pela origem dos pesos aceitos. A biblioteca não é
 declarada corrigida. O [registro de homologação](docs/HOMOLOGACAO-COLAB-2026-10-17.md)
 registra o treino e a reabertura concluídos e as etapas ainda pendentes.
 
+## O que já foi comprovado
+
+| Etapa | Estado | Evidência |
+| --- | --- | --- |
+| GitHub → Colab → GPU | Concluída pelo operador do projeto | Código fixado e conferido, instalação isolada, treino T4 de 63 passos e adaptador salvo no Drive |
+| Reabrir em outra VM | Concluída pelo mesmo operador | Nova sessão instalou as dependências, verificou os arquivos e classificou duas mensagens sem treinar de novo |
+| Outra pessoa, segunda conta e Drive próprio | Pendente | [Issue #2](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/2) |
+| Revisão e versão estável | Pendente | [PR #1](https://github.com/ofelipepeixoto/radar-classificador-colab/pull/1), [PR #4](https://github.com/ofelipepeixoto/radar-classificador-colab/pull/4) e [issue #3](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/3) |
+| Qualidade para atendimento real | Pendente | [Issue #6](https://github.com/ofelipepeixoto/radar-classificador-colab/issues/6): rótulos humanos e avaliação independente |
+
+Os [checks do GitHub](https://github.com/ofelipepeixoto/radar-classificador-colab/actions/runs/39068101790) validaram o código automaticamente; o [registro de homologação](docs/HOMOLOGACAO-COLAB-2026-10-17.md) documenta a execução na GPU. São evidências complementares. Você já pode estudar ou compartilhar esta **prévia experimental**, indicando essas pendências e usando os links da branch abaixo; ainda não há uma tag estável.
+
 ## Comece por aqui
 
 **Prévia para homologação:** [abrir Comece aqui no Colab](https://colab.research.google.com/github/ofelipepeixoto/radar-classificador-colab/blob/fix/safe-training-dependencies/COMECE-AQUI.ipynb) · [testar adaptador salvo](https://colab.research.google.com/github/ofelipepeixoto/radar-classificador-colab/blob/fix/safe-training-dependencies/TESTAR-ADAPTADOR.ipynb).
