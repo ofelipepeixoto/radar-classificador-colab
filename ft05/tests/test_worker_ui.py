@@ -111,7 +111,7 @@ def generate_response(*args):
     return '{"categoria":"entrega","urgencia":"media"}', 3.0
 ''')
             root.joinpath('ft05.py').write_text('import json\ndef target(value): return json.loads(value)\n')
-            result = subprocess.run([sys.executable, '-I', '-u', str(root / 'runtime_worker.py'),
+            result = subprocess.run([sys.executable, '-I', '-B', '-u', str(root / 'runtime_worker.py'),
                                      '--run-dir', 'r', '--corpus', 'c', '--frozen', 'f'],
                                     input='{"id":"a","text":"abc"}\n', text=True,
                                     capture_output=True, timeout=5)
@@ -238,11 +238,14 @@ for line in sys.stdin:
         child._process.wait(timeout=3)
 
     def test_kernel_module_has_no_model_stack_imports(self):
-        result = subprocess.run([sys.executable, '-I', '-c',
-            "import sys; sys.path.insert(0, " + repr(str(Path(colab_ui.__file__).parent)) + "); "
+        source = self.root / 'colab_ui.py'
+        source.write_text(Path(colab_ui.__file__).read_text())
+        result = subprocess.run([sys.executable, '-I', '-B', '-c',
+            "import sys; sys.path.insert(0, " + repr(str(self.root)) + "); "
             "import colab_ui; assert not ({'torch','transformers','peft','personal_smoke','train'} & set(sys.modules))"],
             capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(list(self.root.rglob('*.pyc')))
 
 
 class WidgetsClientTest(unittest.TestCase):
