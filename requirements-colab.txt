@@ -1,0 +1,9 @@
+# Direct versions from the original Colab run, not a complete transitive lock.
+# Datasets advisory: see SECURITY.md. Only in-memory synthetic text is permitted.
+# Install through the explicit notebook cells; CUDA/Python compatibility must be checked.
+unsloth==2026.10.6
+torch==2.11.0+cu128
+transformers==5.13.1
+trl==1.15.0
+datasets==4.8.5
+peft==0.19.1

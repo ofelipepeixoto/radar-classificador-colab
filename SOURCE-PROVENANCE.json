@@ -1,0 +1,7 @@
+{
+  "source_repository": "https://github.com/ofelipepeixoto/radar-model-router",
+  "independent_eval_commit": "8fbfe01ed12242d772d386ab2b763a8467f95430",
+  "public_colab_commit": "5e34d452cb83376e084480a1bbc04034e03902d6",
+  "extracted_prefix": "experiments/ft05",
+  "adaptation": "radar-classificador-colab; original repository preserved"
+}
